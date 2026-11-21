@@ -12,7 +12,7 @@ It answers in Bangla, as text, voice and a picture card.
 
 Built for the CoU AI Hackathon 2026 finals.
 
-> Status and numbers: see [PROJECT.md](PROJECT.md). Results are filled in only after they are measured.
+> Results are reported here only after they are measured.
 
 ## How it works
 

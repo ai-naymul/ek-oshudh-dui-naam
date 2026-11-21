@@ -28,3 +28,8 @@ training/out/
 
 # os
 .DS_Store
+
+# internal notes (kept outside the public repo)
+PROJECT.md
+notes/
+*.internal.md
