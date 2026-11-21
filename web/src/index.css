@@ -32,6 +32,8 @@
 /* 1rem = 18px at normal size; the A+/A- control scales the whole layout (text and spacing) together */
 html { font-size: calc(112.5% * var(--text-scale, 1)); }
 html, body, #root { min-height: 100%; }
+/* Screens slide in sideways; clip (not hidden) so that never makes the page scroll sideways, and sticky still works */
+#root { overflow-x: clip; }
 body {
   margin: 0;
   background: var(--color-paper);

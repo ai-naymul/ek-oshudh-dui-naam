@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# end-to-end screenshots (regenerated on every run)
+e2e/screens/
+test-results/
+playwright-report/
