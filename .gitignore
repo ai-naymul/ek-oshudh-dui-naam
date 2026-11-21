@@ -1,0 +1,30 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+web/dist/
+
+# data and model outputs (downloaded or generated; never committed)
+data/raw/
+data/handwriting/
+data/build/
+data/images_online/
+data/images_home/
+data/prescriptions/
+models/*.txt
+models/*.bin
+eval/results/
+training/out/
+
+# os
+.DS_Store
