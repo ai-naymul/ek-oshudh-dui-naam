@@ -76,14 +76,40 @@ def main():
 
     state = {}
 
+    def ai_key():
+        d, ms, _ = req(base, "/api/health")
+        assert d["ai"]["key_present"], "no GEMINI_API_KEY: photos and voice are off (typed names and the sample still work)"
+        return f"key present, registry {d['registry']['products']} products", ms
+
     def typed_case():
+        """The status gate: Napa + Ace first ASKS (old strips must not alarm); red only once both are taken now."""
         cid = req(base, "/api/cases", "POST", b"")[0]["case_id"]
-        req(base, f"/api/cases/{cid}/text", "POST", {"text": "Napa 500 1+0+1\nAce 500 0+0+1"})
-        d, ms, _ = req(base, f"/api/cases/{cid}/check")
+        items = req(base, f"/api/cases/{cid}/text", "POST", {"text": "Napa 500 1+0+1\nAce 500 0+0+1"})[0]["items"]
+        d, ms1, _ = req(base, f"/api/cases/{cid}/check")
+        assert not [f for f in d["findings"] if f["severity"] == "red"], "red before 'taken now' was answered"
+        assert any(f["rule"] == "DUP_ASK_CURRENT" for f in d["findings"]), d["findings"]
+        for it in items:
+            req(base, f"/api/cases/{cid}/items/{it['item_id']}/status", "POST", {"taking": "current"})
+        d, ms2, _ = req(base, f"/api/cases/{cid}/check")
         red = [f for f in d["findings"] if f["severity"] == "red"]
         assert red and "paracetamol" in red[0]["en"].lower(), d["findings"]
         state["cid"] = cid
-        return red[0]["bn"][:60], ms
+        return "asks first, then " + red[0]["bn"][:48], (ms1 + ms2) / 2
+
+    def sample():
+        d, ms, _ = req(base, "/api/cases/sample", "POST", b"")
+        assert d["sample"] and len(d["items"]) == 3, d
+        c, _, _ = req(base, f"/api/cases/{d['case_id']}/check")
+        assert any(f["rule"] == "DUP_ASK_CURRENT" for f in c["findings"]), c["findings"]
+        return ", ".join(i["chosen"]["brand"] for i in d["items"]) + " → asks 'taken now?'", ms
+
+    def partial():
+        """A line that is not sure yet is counted as not checked: never an all-clear."""
+        cid = req(base, "/api/cases", "POST", b"")[0]["case_id"]
+        req(base, f"/api/cases/{cid}/text", "POST", {"text": "Seclo 20\nNap 500"})
+        d, ms, _ = req(base, f"/api/cases/{cid}/check")
+        assert d["unchecked"] >= 1, d
+        return f"{d['unchecked']} not checked yet", ms
 
     def reopen():
         d, ms, _ = req(base, f"/api/cases/{state['cid']}")
@@ -108,7 +134,10 @@ def main():
     check("web app page", page)
     check("brand lookup (typo + Bangla)", lookup)
     check("random brand", random_brand)
-    check("typed case → red finding", typed_case)
+    check("AI key (photos, voice)", ai_key, required=False)
+    check("sample case", sample)
+    check("typed Napa + Ace: asks, then red", typed_case)
+    check("unsure line → 'not checked', no all-clear", partial)
     check("reopen case by link", reopen)
     if not a.skip_voice:
         check("Bangla voice reply", voice, required=False)
