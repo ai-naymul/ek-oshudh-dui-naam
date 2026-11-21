@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { motion } from 'motion/react'
-import { AlertTriangle, AlertOctagon, Info, Search, Shuffle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { AlertTriangle, AlertOctagon, Info, Search, Shuffle, Share2, X, Loader2 } from 'lucide-react'
+import { drawCard, shareCard } from './card'
 import { api, bn, type CheckResult, type Path } from './api'
 import { MedicineGraph } from './Welcome'
 
@@ -13,6 +14,7 @@ const STYLE = {
 
 export function Results({ result, onBack }: { result: CheckResult; onBack: () => void }) {
   const [tab, setTab] = useState<'result' | 'proof'>('result')
+  const [card, setCard] = useState(false)
   const dup = result.findings.find((f) => f.rule === 'DUP_INGREDIENT')
   const reds = result.findings.filter((f) => f.severity === 'red').length
   return (
@@ -45,6 +47,11 @@ export function Results({ result, onBack }: { result: CheckResult; onBack: () =>
               )
             })}
           </div>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setCard(true)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-lg shadow-brand/20">
+            <Share2 size={20} /> ছবি কার্ড · হোয়াটসঅ্যাপে পাঠান
+          </motion.button>
+          <AnimatePresence>{card && <CardSheet result={result} onClose={() => setCard(false)} />}</AnimatePresence>
           <h3 className="mt-6 text-lg font-bold">আপনার ওষুধগুলো</h3>
           <div className="mt-2 space-y-2">
             {result.medicines.map((m) => (
@@ -61,6 +68,36 @@ export function Results({ result, onBack }: { result: CheckResult; onBack: () =>
         </>
       ) : <Proof result={result} />}
     </motion.main>
+  )
+}
+
+function CardSheet({ result, onClose }: { result: CheckResult; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  useEffect(() => {
+    let u: string | null = null
+    drawCard(result).then((b) => { u = URL.createObjectURL(b); setUrl(u) })
+    return () => { if (u) URL.revokeObjectURL(u) }
+  }, [result])
+  return (
+    <>
+      <motion.div className="fixed inset-0 z-40 bg-ink/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div role="dialog" aria-label="ছবি কার্ড" className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] max-w-xl flex-col rounded-t-[28px] bg-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4"
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}>
+        <div className="flex items-center justify-between">
+          <p className="text-lg font-bold">ছবি কার্ড</p>
+          <button onClick={onClose} aria-label="বন্ধ" className="grid h-9 w-9 place-items-center rounded-full bg-paper"><X size={18} /></button>
+        </div>
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-paper">
+          {url ? <img src={url} alt="ফলাফলের ছবি কার্ড" className="w-full" /> : <div className="grid h-60 place-items-center"><Loader2 className="animate-spin text-brand" /></div>}
+        </div>
+        {note && <p className="mt-2 text-center text-sm text-muted">{note}</p>}
+        <motion.button whileTap={{ scale: 0.97 }} disabled={!url} onClick={async () => setNote((await shareCard(result)) === 'shared' ? 'পাঠানো হয়েছে' : 'ছবি ডাউনলোড হয়েছে; হোয়াটসঅ্যাপে লেখা খোলা হয়েছে')}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white disabled:opacity-40">
+          <Share2 size={20} /> শেয়ার করুন
+        </motion.button>
+      </motion.div>
+    </>
   )
 }
 
