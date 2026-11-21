@@ -12,6 +12,7 @@ import csv
 import os
 import re
 import sqlite3
+import threading
 import unicodedata
 from dataclasses import dataclass
 
@@ -128,25 +129,30 @@ class Graph:
 
     def __init__(self, db_path: str = DB_PATH):
         self.con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
+        self._lock = threading.RLock()  # one connection shared by web/eval threads: serialise access
+
+    def _q(self, sql: str, params: tuple = ()) -> list:
+        with self._lock:
+            return self.con.execute(sql, params).fetchall()
 
     def products_by_brand(self, brand: str) -> list[Product]:
-        rows = self.con.execute(
+        rows = self._q(
             "SELECT id, brand, generic, strength, form, manufacturer, unit_price FROM product WHERE brand_key = ?",
-            (brand_key(brand),)).fetchall()
+            (brand_key(brand),))
         return [Product(*r) for r in rows]
 
     def product(self, pid: int) -> Product:
-        return Product(*self.con.execute(
-            "SELECT id, brand, generic, strength, form, manufacturer, unit_price FROM product WHERE id = ?", (pid,)).fetchone())
+        return Product(*self._q(
+            "SELECT id, brand, generic, strength, form, manufacturer, unit_price FROM product WHERE id = ?", (pid,))[0])
 
     def ingredients(self, pid: int) -> list[tuple[str, str, float | None]]:
-        return self.con.execute(
+        return self._q(
             "SELECT i.name, pi.strength, pi.mg FROM product_ingredient pi JOIN ingredient i ON i.id = pi.ingredient_id "
-            "WHERE pi.product_id = ? ORDER BY i.name", (pid,)).fetchall()
+            "WHERE pi.product_id = ? ORDER BY i.name", (pid,))
 
     def drug_class(self, generic: str) -> str | None:
-        row = self.con.execute("SELECT drug_class FROM generic_info WHERE generic = ?", (generic,)).fetchone()
-        return row[0] if row and row[0] else None
+        rows = self._q("SELECT drug_class FROM generic_info WHERE generic = ?", (generic,))
+        return rows[0][0] if rows and rows[0][0] else None
 
     def path(self, pid: int) -> dict:
         """Brand -> ingredient(s) -> class: the explanation shown on the Proof screen."""
@@ -155,7 +161,7 @@ class Graph:
                 "ingredients": [{"name": n, "strength": s, "class": self.drug_class(n)} for n, s, _ in self.ingredients(pid)]}
 
     def all_brands(self) -> list[str]:
-        return [r[0] for r in self.con.execute("SELECT DISTINCT brand FROM product")]
+        return [r[0] for r in self._q("SELECT DISTINCT brand FROM product")]
 
 
 if __name__ == "__main__":
