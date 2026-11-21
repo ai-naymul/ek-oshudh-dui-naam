@@ -1,0 +1,124 @@
+"""Candidate generation: the top-K real registry products for one messy reading.
+
+Retrieve-then-rerank, step 1 (recall). Signals:
+- character n-gram TF-IDF cosine over all 13,627 brand names (tolerant to OCR and handwriting errors);
+- a phonetic key (Metaphone) match bonus;
+- Bangla-script input transliterated to Latin first (নাপা -> napa), plus a curated Bangla name table when present;
+- strength and dosage-form hints then order each brand's products.
+Rerankers (R1/R2/R3) pick the final answer from this list; nothing outside the list can ever be chosen.
+"""
+from __future__ import annotations
+
+import csv
+import os
+import re
+import unicodedata
+from dataclasses import dataclass, field
+
+import jellyfish
+import numpy as np
+from rapidfuzz import fuzz, process
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from .graph import ROOT, Graph, brand_key
+
+BN_MAP = {
+    "অ": "o", "আ": "a", "ই": "i", "ঈ": "i", "উ": "u", "ঊ": "u", "ঋ": "ri", "এ": "e", "ঐ": "oi", "ও": "o", "ঔ": "ou",
+    "ক": "k", "খ": "kh", "গ": "g", "ঘ": "gh", "ঙ": "ng", "চ": "c", "ছ": "ch", "জ": "j", "ঝ": "jh", "ঞ": "n",
+    "ট": "t", "ঠ": "th", "ড": "d", "ঢ": "dh", "ণ": "n", "ত": "t", "থ": "th", "দ": "d", "ধ": "dh", "ন": "n",
+    "প": "p", "ফ": "f", "ব": "b", "ভ": "bh", "ম": "m", "য": "j", "র": "r", "ল": "l", "শ": "sh", "ষ": "sh",
+    "স": "s", "হ": "h", "ড়": "r", "ঢ়": "rh", "য়": "y", "ৎ": "t", "ং": "ng", "ঃ": "h", "ঁ": "",
+    "া": "a", "ি": "i", "ী": "i", "ু": "u", "ূ": "u", "ৃ": "ri", "ে": "e", "ৈ": "oi", "ো": "o", "ৌ": "ou", "্": "",
+    "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9",
+}
+FORM_WORDS = {"tab": "tablet", "tablet": "tablet", "cap": "capsule", "capsule": "capsule", "syp": "syrup",
+              "syrup": "syrup", "susp": "suspension", "inj": "injection", "drop": "drops", "cream": "cream", "gel": "gel"}
+_NUM = re.compile(r"(\d+(?:\.\d+)?)")
+
+
+def transliterate(text: str) -> str:
+    t = unicodedata.normalize("NFC", text or "")
+    return "".join(BN_MAP.get(ch, ch) for ch in t)
+
+
+def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
+    """Split a reading into (name part, strength number, form) e.g. 'Tab. Napa 500' -> ('napa', '500', 'tablet')."""
+    t = transliterate(reading).lower()
+    form = None
+    for w, f in FORM_WORDS.items():
+        if re.search(rf"\b{w}\b\.?", t):
+            form = f
+            t = re.sub(rf"\b{w}\b\.?", " ", t)
+    nums = _NUM.findall(t)
+    strength = nums[-1] if nums else None
+    name = re.sub(r"\d+(\.\d+)?\s*(mg|gm|g|ml|mcg)?", " ", t)
+    name = re.sub(r"[^a-z\s]+", " ", name)
+    return re.sub(r"\s+", " ", name).strip(), strength, form
+
+
+@dataclass
+class Candidate:
+    product_id: int
+    brand: str
+    strength: str
+    form: str
+    manufacturer: str
+    generic: str
+    name_score: float
+    phonetic_match: bool
+    strength_match: bool
+    form_match: bool
+    rank: int = 0
+    extra: dict = field(default_factory=dict)
+
+
+class CandidateIndex:
+    def __init__(self, graph: Graph | None = None, bn_names_csv: str | None = None):
+        self.g = graph or Graph()
+        rows = self.g.con.execute("SELECT DISTINCT brand FROM product").fetchall()
+        self.brands = [r[0] for r in rows]
+        self.keys = [brand_key(b) for b in self.brands]
+        self.vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4), lowercase=True, sublinear_tf=True)
+        self.mat = self.vec.fit_transform([b.lower() for b in self.brands])
+        self.phon = [jellyfish.metaphone(k) if k else "" for k in self.keys]
+        self.bn_alias: dict[str, str] = {}
+        path = bn_names_csv or os.path.join(ROOT, "data", "curated", "bn_names.csv")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                for r in csv.DictReader(f):
+                    if r.get("bangla") and r.get("brand"):
+                        self.bn_alias[unicodedata.normalize("NFC", r["bangla"].strip())] = r["brand"].strip()
+
+    def top_brands(self, name: str, k: int = 30) -> list[tuple[str, float, bool]]:
+        """Union of two retrievers: char n-gram TF-IDF cosine and edit-distance similarity (rapidfuzz), plus a phonetic bonus."""
+        if not name:
+            return []
+        q = self.vec.transform([name])
+        sims = (self.mat @ q.T).toarray().ravel()
+        idx = set(np.argpartition(-sims, min(k, len(sims) - 1))[:k].tolist())
+        nk = brand_key(name)
+        for _, _, i in process.extract(nk, self.keys, scorer=fuzz.ratio, limit=k):
+            idx.add(i)
+        qp = jellyfish.metaphone(nk) if nk else ""
+        scored = []
+        for i in idx:
+            edit = fuzz.ratio(nk, self.keys[i]) / 100.0
+            ph = bool(qp) and self.phon[i] == qp
+            scored.append((max(float(sims[i]), edit) + (0.15 if ph else 0.0), i, max(float(sims[i]), edit), ph))
+        scored.sort(key=lambda x: -x[0])
+        return [(self.brands[i], s, ph) for _, i, s, ph in scored[:k]]
+
+    def search(self, reading: str, k: int = 20) -> list[Candidate]:
+        raw = unicodedata.normalize("NFC", reading or "").strip()
+        alias = self.bn_alias.get(raw)
+        name, strength, form = parse_hints(alias or raw)
+        out: list[Candidate] = []
+        for brand, sim, ph in self.top_brands(name, k=max(k, 30)):
+            for p in self.g.products_by_brand(brand):
+                s_ok = bool(strength) and strength in re.sub(r"\s", "", p.strength or "")
+                f_ok = bool(form) and form in (p.form or "").lower()
+                out.append(Candidate(p.id, p.brand, p.strength, p.form, p.manufacturer, p.generic, sim, ph, s_ok, f_ok))
+        out.sort(key=lambda c: (-(c.name_score + 0.15 * c.phonetic_match + 0.2 * c.strength_match + 0.05 * c.form_match), c.product_id))
+        for i, c in enumerate(out[:k]):
+            c.rank = i + 1
+        return out[:k]

@@ -60,11 +60,11 @@ It explains in Bangla (text, voice, picture card) and shows the proof.
 
 | # | Issue | State |
 |---|---|---|
-| 1 | Repo setup: skeleton, CI, PROJECT.md, commit rules | in progress |
+| 1 | Repo setup: skeleton, CI, PROJECT.md, commit rules | done except CI file (needs `gh auth refresh -s workflow`) |
 | 2 | Cloudflare Pages hello + quick tunnel hello | todo |
-| 3 | Download scripts: registry + handwriting datasets (+ licences) | todo |
-| 4 | Knowledge graph build (graph.py) + tests | todo |
-| 5 | Candidate generation (candidates.py) + tests | todo |
+| 3 | Download scripts: registry + handwriting datasets (+ licences) | registry + LICENSES.md done; handwriting script todo |
+| 4 | Knowledge graph build (graph.py) + tests | **done** (21,363 / 13,627 / 1,508; 13,253 priced) |
+| 5 | Candidate generation (candidates.py) + tests | **done** (recall@20 98.3%, 1.7 ms) |
 | 6 | Schedule parser (schedule.py) + tests | todo |
 | 7 | Perception smoke test: strips, 2 prescriptions, 100 handwritten words | todo |
 | 8 | Handwriting label coverage vs registry + recall@20 | todo |
@@ -107,6 +107,7 @@ Teammate issues (Day 1):
 
 | Eval | Result |
 |---|---|
+| Candidates (#5) | brand recall@20 = **98.3%** on 600 synthetic noisy readings (seed 7); median 1.7 ms per search |
 | Perception smoke test (#7) | _pending_ |
 | Handwriting coverage + recall@20 (#8) | _pending_ |
 | E1 matching (R1 / R2 / R3 / R2→R3) | _pending_ |
@@ -114,10 +115,11 @@ Teammate issues (Day 1):
 
 ## What changed since last update
 
-- 21 Nov: repo, 4 milestones, 10 labels and 36 issues created; skeleton (FastAPI `/health`, pytest, CI) in progress.
+- 21 Nov: repo, milestones, labels, 36 issues; skeleton pushed (CI file waiting for workflow scope); `main` protected.
+- 21 Nov: knowledge graph built and tested (#4); candidate generation: TF-IDF char n-grams + rapidfuzz edit distance + Metaphone + Bangla transliteration, recall@20 98.3% (#5).
 
 ## Next 3 actions
 
-1. Finish #1: commit the skeleton, push, protect `main`.
-2. #3 + #4: download the registry and build the knowledge graph with tests.
-3. #5 + #6: candidates and schedule parser with tests. Then #7 smoke test with the user's prescriptions.
+1. #6 schedule parser + tests.
+2. #7 perception smoke test (needs the user's 2 prescription photos + a few strip images in `data/prescriptions/`, `data/images_online/`).
+3. #3 handwriting download script + #8 coverage; push CI once the token has workflow scope.
