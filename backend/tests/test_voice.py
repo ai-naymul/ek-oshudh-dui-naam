@@ -44,7 +44,8 @@ def test_confirmed_voice_item_joins_prescription_rules(client, monkeypatch):
     from tests.test_api import fake_read
     cid = client.post("/api/cases").json()["case_id"]
     monkeypatch.setattr(perceive, "read_image", fake_read([("Napa", "500 mg", "1+0+1")], doctor="Dr A"))
-    client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", b"img", "image/jpeg")})
+    from tests.test_robustness import jpg
+    client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")})
     fake_voice(monkeypatch, "আর এস খাই", [{"name_as_said": "এস", "name_english_letters": "Ace", "strength_text": "500"}])
     it = client.post(f"/api/cases/{cid}/voice", files={"file": ("v.webm", b"x" * 100, "audio/webm")}).json()["items"][0]
     client.post(f"/api/cases/{cid}/items/{it['item_id']}/confirm", json={"product_id": it["chosen"]["product_id"]})

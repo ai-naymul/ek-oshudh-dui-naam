@@ -4,18 +4,27 @@ import os
 import random
 import time
 import uuid
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 APP_VERSION = "0.2.0"
 MAX_UPLOAD = 12 * 1024 * 1024
 
-app = FastAPI(title="Ek Oshudh, Dui Naam API", version=APP_VERSION)
+@asynccontextmanager
+async def _lifespan(_app):
+    """Load the registry, search index and decision model before the first visitor, not during it."""
+    engine()
+    _registry_stats()
+    yield
+
+
+app = FastAPI(title="Ek Oshudh, Dui Naam API", version=APP_VERSION, lifespan=_lifespan)
 
 # The app is served by this same server (same origin). CORS only matters for the Vite dev server on another port
 # and for a phone on the same Wi-Fi or the optional tunnel.
@@ -27,11 +36,6 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def _warm() -> None:
-    """Load the registry, search index and decision model before the first visitor, not during it."""
-    engine()
-    _registry_stats()
 
 
 @lru_cache(maxsize=1)
@@ -63,15 +67,30 @@ def _case(case_id: str):
         raise HTTPException(404, "case not found or expired")
 
 
+def _is_image(data: bytes) -> bool:
+    import io
+
+    from PIL import Image, UnidentifiedImageError
+    try:
+        Image.open(io.BytesIO(data)).verify()
+        return True
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
+        return False
+
+
+# Plain (non-async) routes: FastAPI runs them in a worker thread, so a slow AI call never blocks other visitors.
 @app.post("/api/cases/{case_id}/images")
-async def add_image(case_id: str, file: UploadFile = File(...)):
+def add_image(case_id: str, file: UploadFile = File(...)):
     t0 = time.time()
-    data = await file.read()
+    case = _case(case_id)
+    data = file.file.read(MAX_UPLOAD + 1)
     if len(data) > MAX_UPLOAD:
         raise HTTPException(413, "image too large (max 12 MB)")
+    if not _is_image(data):
+        raise HTTPException(415, "this file is not a photo")
     from app.ai.gemini import GeminiError
     try:
-        return live(engine().add_image(_case(case_id), data), t0)
+        return live(engine().add_image(case, data), t0)
     except GeminiError as e:
         raise HTTPException(502, f"reading failed: {e}")
 
@@ -80,14 +99,17 @@ class TextIn(BaseModel):
     text: str
 
 
+MAX_TEXT_CHARS, MAX_TEXT_LINES = 2000, 30
+
+
 MAX_AUDIO = 5 * 1024 * 1024
 
 
 @app.post("/api/cases/{case_id}/voice")
-async def add_voice(case_id: str, file: UploadFile = File(...)):
+def add_voice(case_id: str, file: UploadFile = File(...)):
     t0 = time.time()
     case = _case(case_id)
-    data = await file.read()
+    data = file.file.read(MAX_AUDIO + 1)
     if not data or len(data) > MAX_AUDIO:
         raise HTTPException(413, "voice note must be under 5 MB")
     from app.ai.gemini import GeminiError
@@ -115,19 +137,24 @@ def case_speech(case_id: str):
 @app.post("/api/cases/{case_id}/text")
 def add_text(case_id: str, body: TextIn):
     t0 = time.time()
+    if len(body.text) > MAX_TEXT_CHARS or body.text.count("\n") >= MAX_TEXT_LINES:
+        raise HTTPException(413, f"too long: at most {MAX_TEXT_LINES} lines")
     return live(engine().add_text(_case(case_id), body.text), t0)
 
 
 class ConfirmIn(BaseModel):
     product_id: int | None = None
-    per_day: float | None = None
+    per_day: float | None = Field(default=None, gt=0, le=24)   # doses per day: a real schedule, not a typo
 
 
 @app.post("/api/cases/{case_id}/items/{item_id}/confirm")
 def confirm(case_id: str, item_id: str, body: ConfirmIn):
     t0 = time.time()
+    case = _case(case_id)
+    if body.product_id is not None and not engine().graph.has_product(body.product_id):
+        raise HTTPException(422, "no such product in the registry")
     try:
-        return live(engine().confirm(_case(case_id), item_id, body.product_id, body.per_day), t0)
+        return live(engine().confirm(case, item_id, body.product_id, body.per_day), t0)
     except StopIteration:
         raise HTTPException(404, "item not found")
 

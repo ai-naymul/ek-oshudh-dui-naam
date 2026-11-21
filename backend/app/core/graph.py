@@ -145,6 +145,9 @@ class Graph:
             (brand_key(brand),))
         return [Product(*r) for r in rows]
 
+    def has_product(self, product_id: int) -> bool:
+        return bool(self._q("SELECT 1 FROM product WHERE id = ?", (int(product_id),)))
+
     def product(self, pid: int) -> Product:
         return Product(*self._q(
             "SELECT id, brand, generic, strength, form, manufacturer, unit_price FROM product WHERE id = ?", (pid,))[0])

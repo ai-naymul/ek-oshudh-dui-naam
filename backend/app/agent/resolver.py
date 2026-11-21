@@ -52,17 +52,29 @@ class Resolver:
     def _find_brand(self, name: str) -> dict:
         return {"products": self.e._options(self.e.index.search(name, 20), 5)}
 
-    def _get_ingredients(self, product_id: int) -> dict:
-        return self.e.graph.path(int(product_id)) or {"error": "unknown product"}
+    def _pid(self, value) -> int | None:
+        """Model-supplied ids are untrusted: only a whole number naming a real registry product passes."""
+        try:
+            pid = int(value)
+        except (TypeError, ValueError):
+            return None
+        return pid if self.e.graph.has_product(pid) else None
+
+    def _get_ingredients(self, product_id) -> dict:
+        pid = self._pid(product_id)
+        return (self.e.graph.path(pid) or {"error": "unknown product"}) if pid else {"error": "unknown product"}
 
     def _check_bag(self, case, item) -> dict:
         return {"medicines": [{"brand": self.e.options_brand(i), "source": i.source, "confirmed": not i.needs_confirm,
                                "product_id": i.product_id}
                               for i in case.items if i is not item and i.product_id]}
 
-    def _compare_prices(self, product_id: int) -> dict:
-        p = self.e.graph.product(int(product_id))
-        return {"brand": p.brand, "strength": p.strength, "maker": p.manufacturer, "unit_price": p.unit_price} if p else {"error": "unknown"}
+    def _compare_prices(self, product_id) -> dict:
+        pid = self._pid(product_id)
+        if not pid:
+            return {"error": "unknown product"}
+        p = self.e.graph.product(pid)
+        return {"brand": p.brand, "strength": p.strength, "maker": p.manufacturer, "unit_price": p.unit_price}
 
     def resolve(self, case, item) -> dict:
         """-> {"product_id": int|None, "reason_bn": str, "steps": [...], "grounded": bool}"""
@@ -102,7 +114,10 @@ class Resolver:
 
     @staticmethod
     def _finish(args: dict, seen_ids: set, steps: list) -> dict:
-        pid = int(args.get("product_id") or 0)
+        try:
+            pid = int(args.get("product_id") or 0)
+        except (TypeError, ValueError):
+            pid = 0
         reason = str(args.get("reason_bn") or "").strip()
         grounded = pid in seen_ids
         if not grounded or any(b in reason.lower() for b in BANNED):

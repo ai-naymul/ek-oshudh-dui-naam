@@ -144,6 +144,9 @@ def speak(text: str, model: str, voice: str, retries: int = 2, timeout: int = 90
     gc = {"responseModalities": ["AUDIO"], "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}
 
     def parse(cand):
-        part = next(p for p in cand["content"]["parts"] if "inlineData" in p)["inlineData"]
+        part = next((p for p in cand.get("content", {}).get("parts", []) if "inlineData" in p), None)
+        if part is None:
+            raise GeminiError(f"{model} returned no audio")
+        part = part["inlineData"]
         return base64.b64decode(part["data"]), part.get("mimeType", "audio/wav")
     return _post(model, [{"text": text}], gc, retries, timeout, parse)

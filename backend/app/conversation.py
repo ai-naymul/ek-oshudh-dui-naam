@@ -65,6 +65,19 @@ class Case:
     items: list[CaseItem] = field(default_factory=list)
     docs: list[dict] = field(default_factory=list)
     trace: list[dict] = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _next_item: int = 1
+    _next_doc: int = 1
+
+    def new_ids(self, n_items: int, new_doc: bool = False) -> tuple[list[str], str | None]:
+        """Reserve item ids (and a document id) under the case lock: parallel uploads never share an id."""
+        with self.lock:
+            ids = [f"I{self._next_item + k}" for k in range(n_items)]
+            self._next_item += n_items
+            doc = None
+            if new_doc:
+                doc, self._next_doc = f"D{self._next_doc}", self._next_doc + 1
+            return ids, doc
 
     def step(self, name: str, t0: float, **info) -> None:
         self.trace.append({"step": name, "ms": round((time.time() - t0) * 1000, 1), **info})
@@ -134,13 +147,22 @@ class Engine:
         sure = first.confidence >= self.policy["r1_accept"] and first.detail.get("margin", 0) >= self.policy["r1_margin"]
         if sure and not handwritten:
             return first.candidate, first.confidence, "R1", False, cands
-        if crop_parts:
-            third = r3(crop_parts, cands, k=5)
+        third = self._safe_r3(crop_parts, cands) if crop_parts else None
+        if third is not None:
             if third.candidate and third.candidate.brand == first.candidate.brand and sure:
                 return third.candidate, max(first.confidence, third.confidence), "R1+R3 agree", False, cands
             if third.candidate:
                 return third.candidate, third.confidence, "R3", True, cands
         return first.candidate, first.confidence, "R1", True, cands
+
+    @staticmethod
+    def _safe_r3(crop_parts: list, cands: list):
+        """The constrained AI choice is a second opinion: if it fails (network, quota), the family is asked instead."""
+        from app.ai.gemini import GeminiError
+        try:
+            return r3(crop_parts, cands, k=5)
+        except GeminiError:
+            return None
 
     def _match_r2(self, reading: str, alternatives: list[str], crop_parts: list | None, exact_ok: bool = False) -> tuple:
         """Shipped policy from E1 (models/policy.json): accept when the decision model is sure; otherwise ask the
@@ -156,8 +178,8 @@ class Engine:
             return top, round(p, 3), "R2", False, order
         if exact_ok and brand_key(parse_hints(reading)[0]) == brand_key(top.brand):
             return top, round(p, 3), "exact name", False, order
-        if crop_parts:
-            third = r3(crop_parts, [c for c, _ in ranked[:5]], k=5)
+        third = self._safe_r3(crop_parts, [c for c, _ in ranked[:5]]) if crop_parts else None
+        if third is not None:
             agree_min = self.policy.get("agree_min")
             if third.candidate and third.candidate.brand == top.brand and agree_min is not None and p >= agree_min:
                 return top, round(p, 3), "R2+R3 agree", False, order
@@ -174,42 +196,54 @@ class Engine:
         from app.ai.perceive import crop, read_image
         t0 = time.time()
         read = read_image(data)
-        doc_id = f"D{len(case.docs) + 1}"
+        ids, doc_id = case.new_ids(len(read["items"]), new_doc=True)
         source = "rx" if read["kind"] == "prescription" else "strip"
-        case.step("perceive", t0, doc=doc_id, kind=read["kind"], lines=len(read["items"]), model=read["meta"].get("model"))
-        case.docs.append({"doc_id": doc_id, "kind": read["kind"], "doctor": read.get("doctor_text") or doc_id})
+        steps = [("perceive", t0, dict(doc=doc_id, kind=read["kind"], lines=len(read["items"]), model=read["meta"].get("model")))]
         new = []
-        for it in read["items"]:
+        for item_id, it in zip(ids, read["items"]):
             t1 = time.time()
             c = crop(read["image"], it.get("box"))
             parts = [image_part(c, "image/jpeg")] if c else None
             text = " ".join(x for x in (it.get("brand_text", ""), it.get("strength_text", ""), it.get("form_text", "")) if x)
             chosen, conf, method, confirm, cands = self.match(text, it.get("alternatives", []), parts, bool(it.get("handwritten")))
             sched = parse_schedule(" ".join(x for x in (it.get("schedule_text", ""), it.get("meal_text", ""), it.get("duration_text", "")) if x))
-            ci = CaseItem(f"I{len(case.items) + 1}", doc_id, source, it.get("brand_text", ""), it.get("alternatives", []),
+            ci = CaseItem(item_id, doc_id, source, it.get("brand_text", ""), it.get("alternatives", []),
                           it.get("strength_text", ""), it.get("schedule_text", ""), bool(it.get("handwritten")), it.get("agree"),
                           self._options(cands), chosen.product_id if chosen else None, round(conf, 3), method, confirm,
                           sched.per_day, sched.to_dict(), read.get("doctor_text") or doc_id, c)
-            case.items.append(ci)
             new.append(ci)
-            case.step("match", t1, item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
-                      chosen=self.options_brand(ci))
+            steps.append(("match", t1, dict(item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
+                                             chosen=self.options_brand(ci))))
+        # only now, when every line was read and matched, does the photo become part of the case (all or nothing)
+        self._commit(case, new, steps, doc={"doc_id": doc_id, "kind": read["kind"], "doctor": read.get("doctor_text") or doc_id,
+                                            "date": read.get("date_text") or ""})
         return {"doc_id": doc_id, "kind": read["kind"], "items": [self.item_view(i) for i in new]}
+
+    @staticmethod
+    def _commit(case: Case, new: list, steps: list, doc: dict | None = None) -> None:
+        with case.lock:
+            if doc:
+                case.docs.append(doc)
+            case.items.extend(new)
+            for name, t0, info in steps:
+                case.step(name, t0, **info)
 
     def add_text(self, case: Case, text: str) -> dict:
         """Typed or spoken lines, e.g. 'Napa 500 1+0+1'. Works offline: no model call at all."""
-        new = []
-        for line in [l.strip() for l in text.replace("،", "\n").split("\n") if l.strip()]:
+        lines = [l.strip() for l in text.replace("،", "\n").split("\n") if l.strip()]
+        ids, _ = case.new_ids(len(lines))
+        new, steps = [], []
+        for item_id, line in zip(ids, lines):
             t0 = time.time()
             sched = parse_schedule(line)
             chosen, conf, method, confirm, cands = self.match(line, [], None, False)
-            ci = CaseItem(f"I{len(case.items) + 1}", "typed", "text", line, [], "", line, False, None, self._options(cands),
+            ci = CaseItem(item_id, "typed", "text", line, [], "", line, False, None, self._options(cands),
                           chosen.product_id if chosen else None, round(conf, 3), method, confirm, sched.per_day,
                           sched.to_dict(), None)
-            case.items.append(ci)
             new.append(ci)
-            case.step("match", t0, item=ci.item_id, reading=line, method=method, confidence=ci.confidence,
-                      chosen=self.options_brand(ci))
+            steps.append(("match", t0, dict(item=ci.item_id, reading=line, method=method, confidence=ci.confidence,
+                                            chosen=self.options_brand(ci))))
+        self._commit(case, new, steps)
         return {"items": [self.item_view(i) for i in new]}
 
     def add_voice(self, case: Case, data: bytes, mime: str) -> dict:
@@ -222,8 +256,9 @@ class Engine:
         t1 = time.time()
         found, meta2 = mentions(transcript)
         case.step("extract", t1, mentions=len(found), model=meta2.get("model"))
-        new = []
-        for m in found:
+        ids, _ = case.new_ids(len(found))
+        new, steps = [], []
+        for item_id, m in zip(ids, found):
             t2 = time.time()
             said, latin = (m.get("name_as_said") or "").strip(), (m.get("name_english_letters") or "").strip()
             reading = " ".join(x for x in (latin or said, m.get("strength_text", "")) if x)
@@ -231,13 +266,13 @@ class Engine:
             sched_text = m.get("schedule_text", "") or ""
             sched = parse_schedule(sched_text)
             chosen, conf, method, _, cands = self.match(reading, alts, None, False)
-            ci = CaseItem(f"I{len(case.items) + 1}", "voice", "voice", said or latin, alts, m.get("strength_text", ""),
+            ci = CaseItem(item_id, "voice", "voice", said or latin, alts, m.get("strength_text", ""),
                           sched_text, False, None, self._options(cands), chosen.product_id if chosen else None,
                           round(conf, 3), method, True, sched.per_day, sched.to_dict(), None)
-            case.items.append(ci)
             new.append(ci)
-            case.step("match", t2, item=ci.item_id, reading=reading, method=method, confidence=ci.confidence,
-                      chosen=self.options_brand(ci))
+            steps.append(("match", t2, dict(item=ci.item_id, reading=reading, method=method, confidence=ci.confidence,
+                                            chosen=self.options_brand(ci))))
+        self._commit(case, new, steps)
         return {"transcript": transcript, "items": [self.item_view(i) for i in new]}
 
     def speech(self, case: Case) -> tuple[bytes, str, str]:
