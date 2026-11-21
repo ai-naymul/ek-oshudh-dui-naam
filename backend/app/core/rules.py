@@ -48,6 +48,7 @@ class Item:
     handwritten: bool = False
     per_day: float | None = None     # from the prescription schedule or the user
     doctor: str | None = None
+    taking: str = "unsure"           # 'current' | 'stopped' | 'unsure': a bag holds old strips, so presence != taken now
 
 
 @dataclass
@@ -71,18 +72,35 @@ class Medicine:
     def from_rx(self) -> bool:
         return any(i.source == "rx" for i in self.sources)
 
+    @property
+    def taking(self) -> str:
+        """Taken now if any source says so; stopped only if every source says so; otherwise not known."""
+        states = {i.taking for i in self.sources}
+        return "current" if "current" in states else "stopped" if states == {"stopped"} else "unsure"
+
+    @property
+    def is_combination(self) -> bool:
+        return len(self.ingredients) > 1
+
 
 @dataclass
 class Finding:
-    rule: str            # DUP_INGREDIENT | SAME_CLASS | DOSE_OVER | RISKY_PAIR | OTC_ONLY | CONFIRM_FIRST | UNKNOWN
+    rule: str            # DUP_INGREDIENT | DUP_ASK_CURRENT | SAME_CLASS | DOSE_OVER | RISKY_PAIR | OTC_ONLY | CONFIRM_FIRST | UNKNOWN
     severity: str        # red | amber | info
     meds: list[str]
     data: dict
     source: str
 
 
+# Rule switches (overridden by config/settings.json "rules"): dose limits stay off until a pharmacist reviews them;
+# "not on any prescription" is shown as a tag on the medicine, not as a finding.
+RULE_DEFAULTS = {"dose_limits": False, "not_on_rx_finding": False}
+SEVERITIES = ("red", "amber", "info")
+
+
 class Rules:
-    def __init__(self, graph: Graph):
+    def __init__(self, graph: Graph, settings: dict | None = None):
+        self.settings = {**RULE_DEFAULTS, **(settings or {})}
         self.g = graph
         self.dose = {r["ingredient"]: r for r in _csv("dose_limits.csv")}
         self.cls: dict[str, dict] = {}
@@ -125,55 +143,88 @@ class Rules:
     # ---------- rules ----------
     def check(self, items: list[Item]) -> tuple[list[Medicine], list[Finding]]:
         meds, findings = self.reconcile(items)
-        usable = [m for m in meds if m.usable_for_red]
+        # confirmed readings only, and never a medicine the family says is no longer taken
+        usable = [m for m in meds if m.usable_for_red and m.taking != "stopped"]
         by_ing: dict[str, list[Medicine]] = {}
         for m in usable:
             for ing, _ in m.ingredients:
                 by_ing.setdefault(ing, []).append(m)
-        for ing, ms in sorted(by_ing.items()):
-            if len(ms) >= 2:
-                findings.append(Finding("DUP_INGREDIENT", "red", [m.med_id for m in ms],
-                                        {"ingredient": ing, "brands": [m.brand for m in ms],
-                                         "doctors": sorted({d for m in ms for d in m.doctors})},
-                                        "registry: brand → ingredient"))
-        seen_groups: dict[str, set[str]] = {}
-        for ing, ms in by_ing.items():
-            row = self.cls.get(ing)
-            if row:
-                seen_groups.setdefault(row["group"], set()).add(ing)
-        for group, ings in sorted(seen_groups.items()):
-            if len(ings) >= 2:
-                ms = sorted({m.med_id for i in ings for m in by_ing[i]})
-                row = self.cls[sorted(ings)[0]]
-                findings.append(Finding("SAME_CLASS", "amber", ms,
-                                        {"group": group, "group_bn": row["group_bn"], "ingredients": sorted(ings),
-                                         "brands": sorted({m.brand for i in ings for m in by_ing[i]})},
-                                        "curated class_groups.csv"))
-        for ing, ms in sorted(by_ing.items()):
-            limit = self.dose.get(ing)
-            if not limit:
-                continue
-            if any(m.per_day is None for m in ms) or any(mg is None for m in ms for i, mg in m.ingredients if i == ing):
-                continue
-            total = sum(mg * m.per_day for m in ms for i, mg in m.ingredients if i == ing)
-            if total > float(limit["max_daily_mg"]):
-                findings.append(Finding("DOSE_OVER", "red", [m.med_id for m in ms],
-                                        {"ingredient": ing, "total_mg": round(total), "max_mg": int(float(limit["max_daily_mg"])),
-                                         "brands": [m.brand for m in ms]},
-                                        f"{limit['source_sentence']} ({limit['verified_by']})"))
+        findings += self._duplicates(by_ing)
+        findings += self._same_family(by_ing)
+        if self.settings["dose_limits"]:
+            findings += self._dose(by_ing)
         present = set(by_ing)
         for p in self.pairs:
             if p["a"] in present and p["b"] in present:
                 ms = sorted({m.med_id for k in (p["a"], p["b"]) for m in by_ing[k]})
-                findings.append(Finding("RISKY_PAIR", p["severity"], ms,
+                sev = p["severity"] if p["severity"] in SEVERITIES else "amber"
+                findings.append(Finding("RISKY_PAIR", sev, ms,
                                         {"a": p["a"], "b": p["b"], "note_en": p["note_en"], "note_bn": p["note_bn"]}, p["source"]))
-        if any(m.from_rx for m in meds):
+        if self.settings["not_on_rx_finding"] and any(m.from_rx for m in meds):
             for m in meds:
                 if not m.from_rx:
                     findings.append(Finding("OTC_ONLY", "info", [m.med_id], {"brand": m.brand}, "not on any prescription"))
-        order = {"red": 0, "amber": 1, "info": 2}
+        order = {s: i for i, s in enumerate(SEVERITIES)}
         findings.sort(key=lambda f: (order[f.severity], f.rule))
         return meds, findings
+
+    def _duplicates(self, by_ing: dict[str, list[Medicine]]) -> list[Finding]:
+        """One finding per group of medicines sharing ingredients (Napa Extra + Ace Plus share two: one finding).
+        Red only when every medicine in the group is taken now; otherwise ask the family first."""
+        groups: dict[tuple[str, ...], dict] = {}
+        for ing, ms in sorted(by_ing.items()):
+            if len(ms) >= 2:
+                key = tuple(m.med_id for m in ms)
+                groups.setdefault(key, {"meds": ms, "ingredients": []})["ingredients"].append(ing)
+        out = []
+        for key, grp in groups.items():
+            ms = grp["meds"]
+            data = {"ingredients": grp["ingredients"], "ingredient": grp["ingredients"][0], "brands": [m.brand for m in ms],
+                    "doctors": sorted({d for m in ms for d in m.doctors}),
+                    "combination": [m.brand for m in ms if m.is_combination], "taking": [m.taking for m in ms]}
+            if all(m.taking == "current" for m in ms):
+                out.append(Finding("DUP_INGREDIENT", "red", list(key), data, "registry: brand → ingredient"))
+            else:
+                out.append(Finding("DUP_ASK_CURRENT", "amber", list(key), data,
+                                   "registry: brand → ingredient; waiting for 'taken now' from the family"))
+        return out
+
+    def _same_family(self, by_ing: dict[str, list[Medicine]]) -> list[Finding]:
+        seen_groups: dict[str, set[str]] = {}
+        for ing in by_ing:
+            row = self.cls.get(ing)
+            if row:
+                seen_groups.setdefault(row["group"], set()).add(ing)
+        out = []
+        for group, ings in sorted(seen_groups.items()):
+            if len(ings) >= 2:
+                ms = sorted({m.med_id for i in ings for m in by_ing[i]})
+                row = self.cls[sorted(ings)[0]]
+                out.append(Finding("SAME_CLASS", "amber", ms,
+                                   {"group": group, "group_bn": row["group_bn"], "ingredients": sorted(ings),
+                                    "brands": sorted({m.brand for i in ings for m in by_ing[i]})},
+                                   "curated class_groups.csv"))
+        return out
+
+    def _dose(self, by_ing: dict[str, list[Medicine]]) -> list[Finding]:
+        """Daily total of one ingredient over solid forms taken now. Liquids (mg per ml) are left out of the sum
+        instead of switching the whole check off; a solid medicine without a known schedule means no total."""
+        out = []
+        for ing, ms in sorted(by_ing.items()):
+            limit = self.dose.get(ing)
+            if not limit:
+                continue
+            solid = [m for m in ms if all(mg is not None for i, mg in m.ingredients if i == ing)]
+            liquids = [m.brand for m in ms if m not in solid]
+            if not solid or any(m.per_day is None for m in solid):
+                continue
+            total = sum(mg * m.per_day for m in solid for i, mg in m.ingredients if i == ing)
+            if total > float(limit["max_daily_mg"]):
+                out.append(Finding("DOSE_OVER", "red", [m.med_id for m in solid],
+                                   {"ingredient": ing, "total_mg": round(total), "max_mg": int(float(limit["max_daily_mg"])),
+                                    "brands": [m.brand for m in solid], "left_out_liquids": liquids},
+                                   f"{limit['source_sentence']} ({limit['verified_by']})"))
+        return out
 
     # ---------- money ----------
     def cheaper(self, product_id: int, limit: int = 3) -> list[dict]:
@@ -188,6 +239,6 @@ class Rules:
 
     @staticmethod
     def monthly_cost(m: Medicine) -> float | None:
-        if m.unit_price is None or m.per_day is None:
+        if m.unit_price is None or m.per_day is None or any(mg is None for _, mg in m.ingredients):
             return None
         return round(m.unit_price * m.per_day * 30, 2)

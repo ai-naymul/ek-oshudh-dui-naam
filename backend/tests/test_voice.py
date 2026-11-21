@@ -48,6 +48,8 @@ def test_confirmed_voice_item_joins_prescription_rules(client, monkeypatch):
     fake_voice(monkeypatch, "আর এস খাই", [{"name_as_said": "এস", "name_english_letters": "Ace", "strength_text": "500"}])
     it = client.post(f"/api/cases/{cid}/voice", files={"file": ("v.webm", b"x" * 100, "audio/webm")}).json()["items"][0]
     client.post(f"/api/cases/{cid}/items/{it['item_id']}/confirm", json={"product_id": it["chosen"]["product_id"]})
+    for iid in ("I1", it["item_id"]):
+        client.post(f"/api/cases/{cid}/items/{iid}/status", json={"taking": "current"})
     chk = client.get(f"/api/cases/{cid}/check").json()
     assert any(f["rule"] == "DUP_INGREDIENT" and f["severity"] == "red" for f in chk["findings"])
 

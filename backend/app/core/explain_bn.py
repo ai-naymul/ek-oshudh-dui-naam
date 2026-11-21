@@ -22,7 +22,8 @@ def _and(items: list[str]) -> str:
 
 TITLES = {
     "DUP_INGREDIENT": ("একই ওষুধ দুইবার", "Same medicine twice"),
-    "SAME_CLASS": ("একই ধরনের দুটি ওষুধ", "Two medicines of the same family"),
+    "DUP_ASK_CURRENT": ("দুটোই কি এখন খাচ্ছেন?", "Are both taken now?"),
+    "SAME_CLASS": ("একই ধরনের ওষুধ: আরও যাচাই দরকার", "Same family: needs checking"),
     "DOSE_OVER": ("দিনের মাত্রা সীমার বেশি", "Daily amount over the limit"),
     "RISKY_PAIR": ("একসাথে খেলে সমস্যা হতে পারে", "This combination needs checking"),
     "OTC_ONLY": ("প্রেসক্রিপশনে নেই", "Not on any prescription"),
@@ -34,18 +35,28 @@ TITLES = {
 def explain(f: Finding) -> dict:
     d = f.data
     title_bn, title_en = TITLES[f.rule]
-    if f.rule == "DUP_INGREDIENT":
+    if f.rule in ("DUP_INGREDIENT", "DUP_ASK_CURRENT"):
         docs = d.get("doctors") or []
         who = f" ({bn_num(len(docs))} জন ডাক্তারের প্রেসক্রিপশন থেকে)" if len(docs) >= 2 else ""
-        bn = f"{_and(d['brands'])}{who}: দুটোতেই একই ওষুধ ({d['ingredient']}) আছে। {ASK}"
-        en = f"{' and '.join(d['brands'])} contain the same medicine ({d['ingredient']}). {ASK_EN}"
+        ings = _and([i.title() for i in d.get("ingredients") or [d["ingredient"]]])
+        ings_en = " and ".join(i.title() for i in d.get("ingredients") or [d["ingredient"]])
+        each = "দুটোতেই" if len(d["brands"]) == 2 else "সবগুলোতেই"
+        each_en = "both" if len(d["brands"]) == 2 else "all"
+        if f.rule == "DUP_INGREDIENT":
+            bn = f"{_and(d['brands'])}{who}: {each} একই উপাদান {ings} আছে। {ASK}"
+            en = f"{' and '.join(d['brands'])} {each_en} contain {ings_en}. {ASK_EN}"
+        else:
+            bn = f"{_and(d['brands'])}{who}: {each} একই উপাদান {ings} আছে। এগুলো কি এখন একসাথে খাচ্ছেন? প্রতিটি ওষুধে জানিয়ে দিন।"
+            en = f"{' and '.join(d['brands'])} {each_en} contain {ings_en}. Are they being taken now? Mark each medicine."
     elif f.rule == "SAME_CLASS":
         bn = f"{_and(d['brands'])} দুটোই {d['group_bn']}। দুটোই দরকার কি না জেনে নিন। {ASK}"
         en = f"{' and '.join(d['brands'])} are both {d['group']}. Ask whether both are needed. {ASK_EN}"
     elif f.rule == "DOSE_OVER":
-        bn = (f"{_and(d['brands'])} মিলে দিনে {bn_num(d['total_mg'])} মিলিগ্রাম {d['ingredient']} হচ্ছে; "
+        joined = "মিলে" if len(d["brands"]) > 1 else "থেকে"
+        bn = (f"{_and(d['brands'])} {joined} দিনে {bn_num(d['total_mg'])} মিলিগ্রাম {d['ingredient'].title()} হচ্ছে; "
               f"সীমা {bn_num(d['max_mg'])} মিলিগ্রাম। {ASK}")
-        en = f"Together {', '.join(d['brands'])} give {d['total_mg']} mg of {d['ingredient']} a day; the limit is {d['max_mg']} mg. {ASK_EN}"
+        lead = f"Together {', '.join(d['brands'])} give" if len(d["brands"]) > 1 else f"{d['brands'][0]} gives"
+        en = f"{lead} {d['total_mg']} mg of {d['ingredient'].title()} a day; the limit is {d['max_mg']} mg. {ASK_EN}"
     elif f.rule == "RISKY_PAIR":
         bn = f"{d['note_bn']}। {ASK}"
         en = f"{d['note_en'].capitalize()}. {ASK_EN}"

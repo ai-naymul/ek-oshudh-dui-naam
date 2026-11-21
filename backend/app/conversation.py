@@ -20,9 +20,11 @@ from app.core.graph import ROOT, Graph, brand_key
 from app.core.rerank import distinct_brands, r1, r3
 from app.core.rules import Item, Rules
 from app.core.schedule import parse as parse_schedule
+from app.core.settings import DEFAULTS as SETTINGS_DEFAULTS, _merge, load_settings
 
 POLICY_PATH = os.path.join(ROOT, "models", "policy.json")
-DEFAULT_POLICY = {"method": "R1+R3", "r1_accept": 0.85, "r1_margin": 0.10, "note": "default until E1/R2 sets thresholds"}
+DEFAULT_POLICY = {"method": "R1+R3", "r1_accept": 0.85, "r1_margin": 0.10, "r2_accept": 0.98, "agree_min": None,
+                  "note": "default until E1/R2 sets thresholds"}
 TTL_SECONDS = 2 * 3600
 
 
@@ -53,6 +55,7 @@ class CaseItem:
     doctor: str | None
     crop: bytes | None = None
     agent: dict | None = None     # the resolver's suggestion for an unclear item (still needs the user's tap)
+    taking: str = "unsure"        # current | stopped | unsure, set by the family; red duplicates need 'current'
 
 
 @dataclass
@@ -68,11 +71,14 @@ class Case:
 
 
 class Engine:
-    def __init__(self):
+    def __init__(self, settings: dict | None = None):
+        self.settings = load_settings() if settings is None else _merge(SETTINGS_DEFAULTS, settings)
         self.graph = Graph()
         self.index = CandidateIndex(self.graph)
-        self.rules = Rules(self.graph)
+        self.rules = Rules(self.graph, self.settings["rules"])
         self.policy = load_policy()
+        if self.settings["matching"]["auto_accept_threshold"] is not None:
+            self.policy["r2_accept"] = float(self.settings["matching"]["auto_accept_threshold"])
         self.decider = None
         if self.policy.get("method", "").startswith("R2") and Decider.available():
             self.decider = Decider()
@@ -107,7 +113,12 @@ class Engine:
                 for c in distinct_brands(cands, k)]
 
     def match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
-        """-> (chosen product or None, confidence, method, needs_confirm, candidates in display order)."""
+        """-> (chosen product or None, confidence, method, needs_confirm, candidates in display order).
+        With settings matching.always_confirm every reading waits for the family's tap."""
+        chosen, conf, method, confirm, cands = self._match(reading, alternatives, crop_parts, handwritten)
+        return chosen, conf, method, confirm or bool(self.settings["matching"]["always_confirm"]), cands
+
+    def _match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
         if self.decider is not None:
             return self._match_r2(reading, alternatives, crop_parts, exact_ok=not handwritten)
         cands = self.index.search(reading, 20)
@@ -238,6 +249,13 @@ class Engine:
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
         return audio, mime, text
 
+    def set_status(self, case: Case, item_id: str, taking: str) -> dict:
+        """The family says whether this medicine is taken now, stopped, or not known."""
+        it = next(i for i in case.items if i.item_id == item_id)
+        it.taking = taking
+        case.step("status", time.time(), item=item_id, taking=taking)
+        return self.item_view(it)
+
     def resolve(self, case: Case, item_id: str) -> dict:
         """Ask the agent to look for evidence for one unclear item. It can only reorder the options and explain;
         the item still waits for the user's confirmation."""
@@ -270,7 +288,8 @@ class Engine:
     def check(self, case: Case) -> dict:
         t0 = time.time()
         items = [Item(i.item_id, i.source, i.doc_id, i.product_id,
-                      confirmed=not i.needs_confirm, handwritten=i.handwritten, per_day=i.per_day, doctor=i.doctor)
+                      confirmed=not i.needs_confirm, handwritten=i.handwritten, per_day=i.per_day, doctor=i.doctor,
+                      taking=i.taking)
                  for i in case.items]
         meds, findings = self.rules.check(items)
         case.step("rules", t0, findings=len(findings))
@@ -296,4 +315,4 @@ class Engine:
                 "alternatives": it.alternatives, "handwritten": it.handwritten, "agree": it.agree, "chosen": chosen,
                 "confidence": it.confidence, "method": it.method, "needs_confirm": it.needs_confirm,
                 "options": it.options, "schedule": it.schedule, "per_day": it.per_day, "has_crop": it.crop is not None,
-                "agent": it.agent, "doctor": it.doctor}
+                "agent": it.agent, "doctor": it.doctor, "taking": it.taking}

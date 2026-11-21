@@ -5,6 +5,7 @@ import random
 import time
 import uuid
 from functools import lru_cache
+from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -129,6 +130,19 @@ def confirm(case_id: str, item_id: str, body: ConfirmIn):
         return live(engine().confirm(_case(case_id), item_id, body.product_id, body.per_day), t0)
     except StopIteration:
         raise HTTPException(404, "item not found")
+
+
+class StatusIn(BaseModel):
+    taking: Literal["current", "stopped", "unsure"]
+
+
+@app.post("/api/cases/{case_id}/items/{item_id}/status")
+def item_status(case_id: str, item_id: str, body: StatusIn):
+    """Taken now / stopped / not sure: a duplicate turns red only when every medicine involved is taken now."""
+    case = _case(case_id)
+    if not any(i.item_id == item_id for i in case.items):
+        raise HTTPException(404, "item not found")
+    return engine().set_status(case, item_id, body.taking)
 
 
 @app.post("/api/cases/{case_id}/items/{item_id}/resolve")

@@ -28,7 +28,7 @@ def _engine():
     return _ENGINE
 
 
-@server.tool(description="Check a list of medicines a person takes. Each line is a brand name, optionally with "
+@server.tool(description="Check a list of medicines a person takes now. Each line is a brand name, optionally with "
                          "strength and schedule, e.g. 'Napa 500 1+0+1'. Lines marked with a doctor (prefix 'Rx:') "
                          "count as prescribed; others as bought/at home.")
 def check_medicines(lines: list[str]) -> dict:
@@ -43,6 +43,8 @@ def check_medicines(lines: list[str]) -> dict:
         e.add_text(case, line)
         for it in case.items[before:]:
             it.source, it.doc_id, it.doctor = "rx", "typed-rx", "typed prescription"
+    for it in case.items:   # the caller lists what the person takes now
+        it.taking = "current"
     unsure = [{"line": i.reading, "best_guess": e.options_brand(i), "options": [o["brand"] for o in i.options]}
               for i in case.items if i.needs_confirm]
     result = e.check(case)

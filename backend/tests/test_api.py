@@ -41,11 +41,23 @@ def test_two_prescriptions_same_medicine_is_red(client, monkeypatch):
     r1 = client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", png(), "image/jpeg")}).json()
     assert r1["items"][0]["chosen"]["brand"] == "Napa"
     monkeypatch.setattr(perceive, "read_image", fake_read([("Ace", "500 mg", "1+0+1")], doctor="Dr B"))
-    client.post(f"/api/cases/{cid}/images", files={"file": ("b.jpg", png(), "image/jpeg")})
+    r2 = client.post(f"/api/cases/{cid}/images", files={"file": ("b.jpg", png(), "image/jpeg")}).json()
+    # before the family says both are taken now: the app asks, it does not warn
+    first = client.get(f"/api/cases/{cid}/check").json()
+    assert [f["rule"] for f in first["findings"] if f["severity"] in ("red", "amber")] == ["DUP_ASK_CURRENT"]
+    for it in (r1["items"][0], r2["items"][0]):
+        assert client.post(f"/api/cases/{cid}/items/{it['item_id']}/status", json={"taking": "current"}).json()["taking"] == "current"
     res = client.get(f"/api/cases/{cid}/check").json()
     reds = [f for f in res["findings"] if f["rule"] == "DUP_INGREDIENT"]
     assert reds and reds[0]["severity"] == "red"
     assert "request_id" in res and res["trace"]
+
+
+def test_status_must_be_one_of_three_words(client):
+    cid = client.post("/api/cases").json()["case_id"]
+    iid = client.post(f"/api/cases/{cid}/text", json={"text": "Napa 500"}).json()["items"][0]["item_id"]
+    assert client.post(f"/api/cases/{cid}/items/{iid}/status", json={"taking": "maybe"}).status_code == 422
+    assert client.post(f"/api/cases/{cid}/items/I99/status", json={"taking": "current"}).status_code == 404
 
 
 def test_typed_names_work_offline(client):

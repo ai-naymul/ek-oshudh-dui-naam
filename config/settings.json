@@ -1,0 +1,11 @@
+{
+  "_about": "Switches you can change on-site; restart the server after editing. Only the keys written here override the defaults in backend/app/core/settings.py.",
+  "matching": {
+    "auto_accept_threshold": null,
+    "always_confirm": false
+  },
+  "rules": {
+    "dose_limits": false,
+    "not_on_rx_finding": false
+  }
+}

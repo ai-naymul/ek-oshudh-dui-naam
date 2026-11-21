@@ -23,12 +23,13 @@ def pid(rules, brand, strength=None, form="Tablet"):
     return ps[0].id
 
 
-def rx(rules, i, brand, per_day=None, doc="Rx1", strength=None, form="Tablet", confirmed=True):
-    return Item(f"I{i}", "rx", doc, pid(rules, brand, strength, form), confirmed=confirmed, per_day=per_day, doctor=doc)
+def rx(rules, i, brand, per_day=None, doc="Rx1", strength=None, form="Tablet", confirmed=True, taking="current"):
+    return Item(f"I{i}", "rx", doc, pid(rules, brand, strength, form), confirmed=confirmed, per_day=per_day, doctor=doc,
+                taking=taking)
 
 
-def strip(rules, i, brand, strength=None, form="Tablet"):
-    return Item(f"S{i}", "strip", f"photo{i}", pid(rules, brand, strength, form))
+def strip(rules, i, brand, strength=None, form="Tablet", taking="current"):
+    return Item(f"S{i}", "strip", f"photo{i}", pid(rules, brand, strength, form), taking=taking)
 
 
 def rules_fired(findings):
@@ -59,8 +60,8 @@ def test_seclo_plus_maxpro_is_amber(rules):
     assert ("DUP_INGREDIENT", "red") not in rules_fired(f)
 
 
-def test_paracetamol_4500mg_is_red(rules):
-    _, f = rules.check([rx(rules, 1, "Napa", per_day=6, strength="500"), rx(rules, 2, "Ace", per_day=3, strength="500")])
+def test_paracetamol_4500mg_is_red_when_dose_limits_are_switched_on(rules):
+    _, f = Rules(rules.g, {"dose_limits": True}).check([rx(rules, 1, "Napa", per_day=6, strength="500"), rx(rules, 2, "Ace", per_day=3, strength="500")])
     over = [x for x in f if x.rule == "DOSE_OVER"]
     assert over and over[0].data["total_mg"] == 4500 and over[0].data["max_mg"] == 4000
 
@@ -70,8 +71,8 @@ def test_prescription_and_its_own_strip_are_one_medicine(rules):
     assert len(meds) == 1 and not any(x.rule == "DUP_INGREDIENT" for x in f)
 
 
-def test_bag_only_item_is_flagged_otc(rules):
-    _, f = rules.check([rx(rules, 1, "Seclo", strength="20", form="Capsule"), strip(rules, 2, "Fexo", strength="120")])
+def test_bag_only_item_is_flagged_otc_when_that_setting_is_on(rules):
+    _, f = Rules(rules.g, {"not_on_rx_finding": True}).check([rx(rules, 1, "Seclo", strength="20", form="Capsule"), strip(rules, 2, "Fexo", strength="120")])
     assert ("OTC_ONLY", "info") in rules_fired(f)
 
 
@@ -92,7 +93,7 @@ def test_clean_case_has_no_warnings(rules):
 
 
 def test_explanations_never_say_stop_or_safe(rules):
-    _, f = rules.check([rx(rules, 1, "Napa", per_day=6, strength="500"), rx(rules, 2, "Ace", per_day=3, strength="500", doc="Rx2"),
+    _, f = Rules(rules.g, {"dose_limits": True, "not_on_rx_finding": True}).check([rx(rules, 1, "Napa", per_day=6, strength="500"), rx(rules, 2, "Ace", per_day=3, strength="500", doc="Rx2"),
                         rx(rules, 3, "Seclo", strength="20", form="Capsule"), rx(rules, 4, "Maxpro", strength="20", form="Capsule")])
     texts = " ".join(explain_bn.explain(x)["bn"] for x in f) + inspect.getsource(explain_bn)
     for banned in ("বন্ধ করুন", "খাবেন না", "নিরাপদ"):
