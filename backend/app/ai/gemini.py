@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import mimetypes
 import os
@@ -79,7 +80,8 @@ def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, t
                 time.sleep(2 * (attempt + 1))
                 continue
             break
-        except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError) as e:
+        except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError,
+                http.client.HTTPException, ConnectionError, OSError) as e:
             last = f"{type(e).__name__}: {e}"
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
