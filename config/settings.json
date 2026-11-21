@@ -6,7 +6,8 @@
   },
   "rules": {
     "dose_limits": false,
-    "not_on_rx_finding": false
+    "not_on_rx_finding": false,
+    "risky_pairs": true
   },
   "sample_case": [
     "Rx: Napa 500 1+0+1",

@@ -52,6 +52,10 @@
   "UNKNOWN": {
    "bn": "চেনা যায়নি",
    "en": "Not found"
+  },
+  "DUP_SAME_RX": {
+   "bn": "একই প্রেসক্রিপশনে একই উপাদান",
+   "en": "Same ingredient on one prescription"
   }
  },
  "templates": {
@@ -60,8 +64,8 @@
    "en": "{brands} {each} contain {ings}. {ask}"
   },
   "DUP_ASK_CURRENT": {
-   "bn": "{brands}: {who}{each} একই উপাদান {ings} আছে। প্রতিটি ওষুধের পাশে জানান, এখন খাচ্ছেন কি না।",
-   "en": "{brands} {each} contain {ings}. Are they being taken now? Mark each medicine."
+   "bn": "{brands}: {who}{each} একই উপাদান {ings} আছে। প্রতিটি ওষুধের পাশে জানান, এখন খাচ্ছেন কি না। {ask}",
+   "en": "{brands} {each} contain {ings}. Are they being taken now? Mark each medicine. {ask}"
   },
   "SAME_CLASS": {
    "bn": "{brands} {all} {group_bn}। {all} দরকার কি না জেনে নিন। {ask}",
@@ -98,12 +102,18 @@
   "UNKNOWN": {
    "bn": "এই ওষুধটি নিবন্ধিত তালিকায় পাওয়া যায়নি। স্ট্রিপ বা বাক্সের ছবি দিন।",
    "en": "This medicine was not found in the registry. Please add a photo of the strip or box."
+  },
+  "DUP_SAME_RX": {
+   "bn": "{brands}: একই প্রেসক্রিপশনের {each} {ings} আছে। ডাক্তার হয়তো ইচ্ছে করেই দিয়েছেন (যেমন দুই মাত্রা মিলিয়ে একটি ডোজ)। {ask}",
+   "en": "{brands} on one prescription {each} contain {ings}. The doctor may have meant this (for example two strengths making one dose). {ask}"
   }
  },
  "speech": {
-  "none": "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি। তবুও ওষুধের তালিকাটি ডাক্তার বা ফার্মাসিস্টকে দেখান।",
+  "none": "একই ওষুধ দুবার পাওয়া যায়নি। তবুও ওষুধের তালিকাটি ডাক্তার বা ফার্মাসিস্টকে দেখান।",
   "head_red": "সতর্কতা। ",
-  "head_amber": "খেয়াল রাখুন। "
+  "head_amber": "খেয়াল রাখুন। ",
+  "unchecked": "{n}টি ওষুধ এখনো নিশ্চিত করা হয়নি, তাই সেগুলো মিলিয়ে দেখা হয়নি। ",
+  "show": "ওষুধের তালিকাটি ডাক্তার বা ফার্মাসিস্টকে দেখান।"
  },
  "ui": {
   "app.name": "এক ওষুধ, দুই নাম",
@@ -187,7 +197,7 @@
   "check.pending": "{n}টি ওষুধ নিশ্চিত করা বাকি",
   "verdict.red": "{n}টি গুরুত্বপূর্ণ সতর্কতা",
   "verdict.amber": "{n}টি বিষয় দেখে নিন",
-  "verdict.ok": "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি",
+  "verdict.ok": "একই ওষুধ দুবার নেই",
   "verdict.sub": "{n}টি ওষুধ মিলিয়ে দেখা হয়েছে। সিদ্ধান্ত নেয় নিবন্ধিত তালিকা আর নির্দিষ্ট নিয়ম, AI নয়।",
   "reveal.head": "{n}টি নাম, একই উপাদান",
   "sev.red": "সতর্কতা",
@@ -204,7 +214,7 @@
   "card.share": "পাঠান বা সেভ করুন",
   "card.sent": "পাঠানো হয়েছে",
   "card.saved": "ছবিটি ডাউনলোড হয়েছে",
-  "card.ok": "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি",
+  "card.ok": "একই ওষুধ দুবার নেই",
   "card.show": "এই কার্ডটি ডাক্তার বা ফার্মাসিস্টকে দেখান।",
   "card.not_advice": "এটি ডাক্তারের পরামর্শের বিকল্প নয়।",
   "card.meds": "ওষুধের তালিকা",
@@ -231,7 +241,7 @@
   "how.auto_wrong": "তার মধ্যে ভুল: লেবেল যেমন ছিল {raw}, লেবেল যাচাইয়ের পর {audited}",
   "how.ask": "আপনাকে জিজ্ঞেস করে",
   "how.ask_top3": "দেখানো ৩টিতে সঠিকটি {p}",
-  "how.method": "সীমা ঠিক করা হয়েছে আলাদা যাচাই-সেটে, যাতে ৯৫% নিশ্চয়তায় ভুল ২%-এর নিচে থাকে; পরীক্ষা-সেট একবারই মাপা হয়েছে।",
+  "how.method": "সীমা ঠিক করা হয়েছে আলাদা যাচাই-সেটে, লক্ষ্য ছিল ৯৫% নিশ্চয়তায় ভুল ২%-এর নিচে। পরীক্ষা-সেটে একবারই মাপা হয়েছে: ডেটাসেটের লেবেল ধরে ভুল {raw}, লেবেল যাচাইয়ের পরে {audited}।",
   "how.try": "যেকোনো নাম নিজে পরীক্ষা করুন",
   "how.try_hint": "ভুল বানান বা বাংলায় লিখলেও নিবন্ধিত তালিকা থেকে খুঁজে দেয়",
   "how.try_random": "যেকোনো একটি নাম",
@@ -272,6 +282,22 @@
   "sched.days": "{n} দিন",
   "steps.aria": "ধাপ",
   "top.size_mark": "অ",
-  "how.try_placeholder": "Nappa, নাপা, Sec1o"
+  "how.try_placeholder": "Nappa, নাপা, Sec1o",
+  "verdict.scope": "এখানে দেখা হয় একই উপাদান দুবার, একই ধরনের ওষুধ আর তালিকাভুক্ত কয়েকটি ঝুঁকির জোড়া। সব পার্শ্বপ্রতিক্রিয়া বা মিথস্ক্রিয়া দেখা হয় না।",
+  "verdict.partial": "{n}টি ওষুধ যাচাই বাকি",
+  "verdict.partial_sub": "নাম নিশ্চিত না হওয়া পর্যন্ত মিলিয়ে দেখা যায় না।",
+  "verdict.partial_action": "নামগুলো নিশ্চিত করুন",
+  "meds.unchecked": "নাম নিশ্চিত হয়নি, তাই যাচাইয়ে ধরা হয়নি"
+ },
+ "agent": {
+  "_about": "The evidence helper's reason is built from what its tools found, never written by the model.",
+  "reason_bag": "এই কেসের {source} থেকে {brand} পাওয়া গেছে।",
+  "reason_registry": "নিবন্ধিত তালিকায় লেখাটির সবচেয়ে কাছের নাম {brand}।",
+  "src": {
+   "strip": "স্ট্রিপের ছবি",
+   "rx": "প্রেসক্রিপশন",
+   "text": "লেখা নাম",
+   "voice": "বলা নাম"
+  }
  }
 }

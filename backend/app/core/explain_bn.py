@@ -41,7 +41,7 @@ def explain(f: Finding, copy: dict | None = None) -> dict:
     w, d = c["words"], f.data
     ask, ask_en = c["ask"]["bn"], c["ask"]["en"]
     key, bn_fields, en_fields = f.rule, {"ask": ask}, {"ask": ask_en}
-    if f.rule in ("DUP_INGREDIENT", "DUP_ASK_CURRENT"):
+    if f.rule in ("DUP_INGREDIENT", "DUP_ASK_CURRENT", "DUP_SAME_RX"):
         docs = d.get("doctors") or []
         ings = [i.title() for i in d.get("ingredients") or [d["ingredient"]]]
         two = len(d["brands"]) == 2

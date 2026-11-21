@@ -67,8 +67,10 @@ export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob>
   const blocks: Block[] = []
   const reds = r.findings.filter((f) => f.severity === 'red').length
   const ambers = r.findings.filter((f) => f.severity === 'amber').length
-  const verdict = reds ? t('verdict.red', { n: bn(reds) }) : ambers ? t('verdict.amber', { n: bn(ambers) }) : t('card.ok')
-  const verdictColor = reds ? C.danger : ambers ? C.warn : C.rx
+  const pending = r.unchecked ?? 0   // same rule as the screen: no all-clear while lines wait for confirmation
+  const verdict = reds ? t('verdict.red', { n: bn(reds) }) : ambers ? t('verdict.amber', { n: bn(ambers) })
+    : pending ? t('verdict.partial', { n: bn(pending) }) : t('card.ok')
+  const verdictColor = reds ? C.danger : ambers || pending ? C.warn : C.rx
 
   ctx.font = `700 54px ${BN}`
   const vLines = wrap(ctx, verdict, inner)
@@ -99,11 +101,12 @@ export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob>
     const it = items.find((i) => m.items.includes(i.item_id) && i.schedule && [i.schedule.morning, i.schedule.noon, i.schedule.night].some((v) => v !== null))
     const s = it?.schedule
     ctx.font = `400 30px ${BN}`
-    const sub = wrap(ctx, m.path.ingredients.map((x) => x.name).join(' + '), inner)
+    const unchecked = m.checked === false   // listed, but clearly not part of the check
+    const sub = wrap(ctx, unchecked ? t('meds.unchecked') : m.path.ingredients.map((x) => x.name).join(' + '), inner)
     const perDay = !s && m.per_day ? t('sched.per_day', { n: bn(m.per_day) }) : ''
     blocks.push({ h: 56 + sub.length * 42 + (s ? 96 : perDay ? 46 : 0) + 26, draw: (c, y) => {
       c.fillStyle = C.ink; c.font = `600 38px ${PRINT}`; c.fillText(`${m.brand} ${m.strength}`, PAD, y + 44)
-      c.fillStyle = C.muted; c.font = `400 30px ${BN}`
+      c.fillStyle = unchecked ? C.warn : C.muted; c.font = `${unchecked ? 600 : 400} 30px ${BN}`
       sub.forEach((l, i) => c.fillText(l, PAD, y + 44 + 46 + i * 42))
       const top = y + 44 + 46 + sub.length * 42
       if (s) {
@@ -145,7 +148,8 @@ export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob>
 
 export function summaryText(r: CheckResult): string {
   const lines = r.findings.filter((f) => f.severity !== 'info').map((f) => `• ${t(`sev.${f.severity}`)}: ${f.bn}`)
-  return [t('app.name'), ...lines, t('card.show'), t('card.not_advice')].join('\n')
+  const pending = r.unchecked ? [`• ${t('verdict.partial', { n: bn(r.unchecked) })}`] : []
+  return [t('app.name'), ...lines, ...pending, t('card.show'), t('card.not_advice')].join('\n')
 }
 
 // Phone: the share sheet (WhatsApp, Messenger and others appear there). Laptop: save the PNG.

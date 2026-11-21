@@ -66,7 +66,7 @@ def test_speech_text_comes_only_from_findings():
     red = {"severity": "red", "bn": "Napa আর Ace: দুটোতেই একই ওষুধ আছে।"}
     info = {"severity": "info", "bn": "তথ্য"}
     assert findings_speech([info, red]).startswith("সতর্কতা। Napa আর Ace")
-    assert "বড় কোনো সমস্যা পাওয়া যায়নি" in findings_speech([info])
+    assert "দুবার পাওয়া যায়নি" in findings_speech([info])          # says what was checked, not "no problem"
 
 
 @pytest.mark.parametrize("source,handwritten,phrase", [("voice", False, "কথায় শোনা"), ("text", False, "লেখা নামটি"),

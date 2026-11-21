@@ -49,7 +49,7 @@ def test_napa_plus_ace_is_red(rules):
 
 
 def test_combination_napa_extra_plus_ace_is_red(rules):
-    _, f = rules.check([rx(rules, 1, "Napa Extra"), rx(rules, 2, "Ace", strength="500")])
+    _, f = rules.check([rx(rules, 1, "Napa Extra"), rx(rules, 2, "Ace", strength="500", doc="Rx2")])
     assert any(x.rule == "DUP_INGREDIENT" and x.data["ingredient"] == "paracetamol" for x in f)
 
 

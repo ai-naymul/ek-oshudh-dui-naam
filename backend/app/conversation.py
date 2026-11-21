@@ -23,6 +23,8 @@ from app.core.schedule import parse as parse_schedule
 from app.core.settings import DEFAULTS as SETTINGS_DEFAULTS, _merge, load_settings
 
 POLICY_PATH = os.path.join(ROOT, "models", "policy.json")
+EXACT_AGREE = 0.9   # both photo readers wrote (nearly) the same brand text
+
 DEFAULT_POLICY = {"method": "R1+R3", "r1_accept": 0.85, "r1_margin": 0.10, "r2_accept": 0.98, "agree_min": None,
                   "note": "default until E1/R2 sets thresholds"}
 TTL_SECONDS = 2 * 3600
@@ -126,15 +128,21 @@ class Engine:
                  "maker": c.manufacturer, "generic": c.generic, "score": round(c.name_score, 3)}
                 for c in distinct_brands(cands, k)]
 
-    def match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
+    def match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool,
+              agree: float | None = None) -> tuple:
         """-> (chosen product or None, confidence, method, needs_confirm, candidates in display order).
-        With settings matching.always_confirm every reading waits for the family's tap."""
-        chosen, conf, method, confirm, cands = self._match(reading, alternatives, crop_parts, handwritten)
+        With settings matching.always_confirm every reading waits for the family's tap.
+        An exact registry name skips the threshold only when typed, or when read from a photo and BOTH readers wrote
+        the same name (agree): the reader's own 'printed' flag alone is not trusted, as a model can tidy a messy
+        handwritten word into a real brand name."""
+        exact_ok = not handwritten and (crop_parts is None or (agree or 0) >= EXACT_AGREE)
+        chosen, conf, method, confirm, cands = self._match(reading, alternatives, crop_parts, handwritten, exact_ok)
         return chosen, conf, method, confirm or bool(self.settings["matching"]["always_confirm"]), cands
 
-    def _match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
+    def _match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool,
+               exact_ok: bool = False) -> tuple:
         if self.decider is not None:
-            return self._match_r2(reading, alternatives, crop_parts, exact_ok=not handwritten)
+            return self._match_r2(reading, alternatives, crop_parts, exact_ok=exact_ok)
         cands = self.index.search(reading, 20)
         seen = {c.product_id for c in cands}
         for alt in alternatives[:3]:
@@ -219,7 +227,8 @@ class Engine:
             c = crop(read["image"], it.get("box"))
             parts = [image_part(c, "image/jpeg")] if c else None
             text = " ".join(x for x in (it.get("brand_text", ""), it.get("strength_text", ""), it.get("form_text", "")) if x)
-            chosen, conf, method, confirm, cands = self.match(text, it.get("alternatives", []), parts, bool(it.get("handwritten")))
+            chosen, conf, method, confirm, cands = self.match(text, it.get("alternatives", []), parts, bool(it.get("handwritten")),
+                                                              it.get("agree"))
             sched = parse_schedule(" ".join(x for x in (it.get("schedule_text", ""), it.get("meal_text", ""), it.get("duration_text", "")) if x))
             ci = CaseItem(item_id, doc_id, source, it.get("brand_text", ""), it.get("alternatives", []),
                           it.get("strength_text", ""), it.get("schedule_text", ""), bool(it.get("handwritten")), it.get("agree"),
@@ -292,7 +301,7 @@ class Engine:
     def speech(self, case: Case) -> tuple[bytes, str, str]:
         from app.ai.speech import findings_speech, speak_bn
         result = self.check(case)
-        text = findings_speech(result["findings"])
+        text = findings_speech(result["findings"], result["unchecked"])
         t0 = time.time()
         audio, mime, meta = speak_bn(text)
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
@@ -350,11 +359,20 @@ class Engine:
             first = {"product_id": pid, "brand": p.brand, "strength": p.strength, "form": p.form,
                      "maker": p.manufacturer, "generic": "", "score": 1.0}
             it.options = [first] + [o for o in it.options if o["brand"] != p.brand][:2]
-            it.agent = {"product_id": pid, "brand": p.brand, "reason_bn": out["reason_bn"],
+            it.agent = {"product_id": pid, "brand": p.brand, "reason_bn": self._agent_reason(p.brand, out.get("evidence")),
                         "tools": [s["tool"] for s in out["steps"]]}
         else:
             it.agent = {"product_id": None, "brand": None, "reason_bn": "", "tools": [s["tool"] for s in out.get("steps", [])]}
         return self.item_view(it)
+
+    @staticmethod
+    def _agent_reason(brand: str, evidence: str | None) -> str:
+        """A fixed sentence naming where the evidence came from; the model's own words are never shown."""
+        a = explain_bn.load_copy()["agent"]
+        if evidence and evidence.startswith("bag:"):
+            src = a["src"].get(evidence.split(":", 1)[1], a["src"]["text"])
+            return a["reason_bag"].format(source=src, brand=brand)
+        return a["reason_registry"].format(brand=brand)
 
     def confirm(self, case: Case, item_id: str, product_id: int | None, per_day: float | None = None) -> dict:
         it = next(i for i in case.items if i.item_id == item_id)
@@ -377,9 +395,13 @@ class Engine:
             out_meds.append({"med_id": m.med_id, "brand": m.brand, "strength": m.strength, "form": m.form,
                              "path": self.graph.path(m.product_id), "per_day": m.per_day, "from_rx": m.from_rx,
                              "doctors": m.doctors, "taking": m.taking, "monthly_cost": Rules.monthly_cost(m),
-                             "cheaper": self.rules.cheaper(m.product_id), "items": [s.item_id for s in m.sources]})
+                             "checked": m.usable_for_red,   # False: waiting for the family's tap, left out of every rule
+                             "cheaper": self.rules.cheaper(m.product_id) if m.usable_for_red else [],
+                             "items": [s.item_id for s in m.sources]})
+        # lines still waiting for the family's tap (or not found) were left out of every rule: say so, never "all clear"
+        unchecked = sum(1 for i in case.items if i.needs_confirm or i.product_id is None)
         return {"case_id": case.case_id, "medicines": out_meds, "findings": [explain_bn.explain(f) for f in findings],
-                "trace": case.trace[-40:], "policy": self.policy}
+                "unchecked": unchecked, "trace": case.trace[-40:], "policy": self.policy}
 
     # ---------- views ----------
     def options_brand(self, it: CaseItem) -> str | None:

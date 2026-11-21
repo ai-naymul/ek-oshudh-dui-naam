@@ -21,9 +21,13 @@ export function Results({ result, items, onBack, onRecheck }: {
   const ambers = result.findings.filter((f) => f.severity === 'amber')
   const order = { red: 0, amber: 1, info: 2 }
   const findings = [...result.findings].sort((a, b) => order[a.severity] - order[b.severity])
+  // Lines still waiting for a tap were left out of every rule: never show an all-clear while any are pending.
+  const pending = result.unchecked ?? 0
   const verdict = reds.length ? { text: t('verdict.red', { n: bn(reds.length) }), cls: 'text-danger' }
     : ambers.length ? { text: t('verdict.amber', { n: bn(ambers.length) }), cls: 'text-warn' }
+    : pending ? { text: t('verdict.partial', { n: bn(pending) }), cls: 'text-warn' }
     : { text: t('verdict.ok'), cls: 'text-rx' }
+  const clear = !reds.length && !ambers.length
   const med = (id: string) => result.medicines.find((m) => m.med_id === id)
   const reveal = reds.find((f) => f.rule === 'DUP_INGREDIENT')
 
@@ -31,6 +35,13 @@ export function Results({ result, items, onBack, onRecheck }: {
     <motion.main className="mx-auto max-w-2xl px-4 pb-16 pt-6 lg:pt-10" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={spring}>
       <h2 className={`display text-[2rem] sm:text-[2.4rem] ${verdict.cls}`}>{verdict.text}</h2>
       <p className="mt-1 text-muted">{t('verdict.sub', { n: bn(result.medicines.length) })}</p>
+      {pending > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-warn-soft p-4">
+          <p className="text-warn">{clear ? t('verdict.partial_sub') : <><span className="font-semibold">{t('verdict.partial', { n: bn(pending) })}।</span> {t('verdict.partial_sub')}</>}</p>
+          <Press onClick={onBack} className="min-h-11 rounded-full bg-white px-4 font-semibold text-ink ring-1 ring-foil">{t('verdict.partial_action')}</Press>
+        </div>
+      )}
+      {clear && <p className="mt-3 text-[0.95rem] text-muted">{t('verdict.scope')}</p>}
 
       {reveal && <Reveal meds={reveal.meds.map(med).filter(Boolean) as Medicine[]} items={items} caseId={result.case_id} />}
 
@@ -153,7 +164,9 @@ function MedRow({ m }: { m: Medicine }) {
         {m.monthly_cost != null && <p className="whitespace-nowrap text-[0.95rem] text-muted">{t('meds.month', { n: bn(Math.round(m.monthly_cost)) })}</p>}
       </div>
       <p className="text-[0.95rem] text-muted">{m.form}{m.taking === 'stopped' ? `, ${t('status.stopped')}` : ''}</p>
-      <p className="mt-1"><span className="text-muted">{t('meds.inside')}: </span><span className="print">{m.path.ingredients.map((x) => x.name).join(' + ')}</span></p>
+      {m.checked === false
+        ? <p className="mt-1 font-semibold text-warn">{t('meds.unchecked')}</p>
+        : <p className="mt-1"><span className="text-muted">{t('meds.inside')}: </span><span className="print">{m.path.ingredients.map((x) => x.name).join(' + ')}</span></p>}
       <p className="text-[0.95rem] text-muted">
         {m.from_rx ? <><FileText size={14} className="mr-1 inline" aria-hidden />{t('meds.on_rx')}{named.length ? ` (${named.join(', ')})` : ''}</> : t('meds.not_on_rx')}
       </p>
@@ -302,7 +315,7 @@ function Benchmark({ policy }: { policy: Record<string, unknown> }) {
         <div className="rounded-xl bg-paper p-3"><p className="text-muted">{t('how.ask')}</p><p className="print text-[1.3rem] font-semibold">{bnPct(1 - test.auto_accept_coverage)}</p>
           <p className="text-muted">{t('how.ask_top3', { p: bnPct(test.asked_in_top3) })}</p></div>
       </div>
-      <p className="mt-3 text-[0.9rem] text-muted">{t('how.method')}</p>
+      <p className="mt-3 text-[0.9rem] text-muted">{t('how.method', { raw: bnPct(test.auto_accept_error), audited: bnPct(audited?.auto_accept_error ?? test.auto_accept_error) })}</p>
     </div>
   )
 }

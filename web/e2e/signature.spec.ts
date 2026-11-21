@@ -68,3 +68,37 @@ test('not sure: search the registry, remove and undo', async ({ page }) => {
   await page.getByRole('button', { name: 'ফিরিয়ে আনুন' }).click()
   await expect(page.getByRole('article')).toHaveCount(2)
 })
+
+test('an unchecked line is never shown as an all-clear', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /লিখে দিন/ }).click()
+  await page.locator('textarea').fill('Seclo 20\nNap 500')
+  await page.getByRole('button', { name: 'তালিকায় যোগ করুন' }).click()
+  await expect(page.getByText('নামটি নিশ্চিত নয়')).toBeVisible()
+  await page.getByRole('button', { name: /মিলিয়ে দেখুন/ }).click()
+  await expect(page.getByRole('heading', { name: '১টি ওষুধ যাচাই বাকি' })).toBeVisible()
+  await expect(page.getByText('দুবার পাওয়া যায়নি')).toHaveCount(0)
+  await expect(page.getByText('নাম নিশ্চিত হয়নি, তাই যাচাইয়ে ধরা হয়নি')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'ওষুধগুলো যোগ করুন' })).toHaveCount(0)   // the screen change has settled
+  await noSideScroll(page)
+  await page.screenshot({ path: shots('6-partial'), fullPage: true })
+  await page.getByRole('button', { name: 'নামগুলো নিশ্চিত করুন' }).click()
+  await expect(page.getByText('নামটি নিশ্চিত নয়')).toBeVisible()
+})
+
+test('every verdict heading fits on one line', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  const lines = await page.evaluate(async () => {
+    const ui = (await (await fetch('/api/copy')).json()).ui as Record<string, string>
+    const texts = ['verdict.red', 'verdict.amber', 'verdict.partial', 'verdict.ok'].map((k) => ui[k].replace('{n}', '১২'))
+    const box = document.createElement('div'); box.className = 'mx-auto max-w-2xl px-4'; document.body.appendChild(box)
+    return texts.map((text) => {
+      const h = document.createElement('h2'); h.className = 'display text-[2rem] sm:text-[2.4rem]'; h.textContent = text
+      h.style.lineHeight = '1.2'; box.appendChild(h)
+      return { text, lines: Math.round(h.getBoundingClientRect().height / (parseFloat(getComputedStyle(h).fontSize) * 1.2)) }
+    })
+  })
+  for (const l of lines) expect(l.lines, l.text).toBe(1)
+})

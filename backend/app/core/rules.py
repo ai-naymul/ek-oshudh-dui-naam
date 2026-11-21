@@ -22,11 +22,37 @@ SALTS = r"\b(hydrochloride|hcl|sodium|potassium|calcium|magnesium|besilate|besyl
         r"dihydrochloride|bromide|citrate|phosphate|sulphate|sulfate|acid)\b"
 
 
+# A name made only of these words is a mineral salt (Potassium Citrate, Calcium Acetate): there the salt IS the
+# medicine, so it keeps its full name instead of being stripped to nothing.
+MINERAL_WORDS = {"sodium", "potassium", "calcium", "magnesium", "chloride", "carbonate", "bicarbonate", "citrate",
+                 "acetate", "lactate", "gluconate", "oxide", "hydroxide", "phosphate", "sulphate", "sulfate", "bromide"}
+
+
 def base_ingredient(name: str) -> str:
-    """'Diclofenac Sodium' -> 'diclofenac', 'Amlodipine Besilate' -> 'amlodipine', 'Mefenamic Acid' -> 'mefenamic'."""
-    t = re.sub(SALTS, " ", (name or "").lower())
-    t = re.sub(r"\(.*?\)", " ", t)
-    return re.sub(r"\s+", " ", t).strip()
+    """'Diclofenac Sodium' -> 'diclofenac', 'Amlodipine Besilate' -> 'amlodipine', 'Mefenamic Acid' -> 'mefenamic',
+    but 'Potassium Citrate' stays 'potassium citrate'. Notes in () or [] are dropped ('[Elemental source]')."""
+    t = re.sub(r"\(.*?\)|\[.*?\]", " ", (name or "").lower())
+    words = t.split()
+    if words and all(w in MINERAL_WORDS for w in words):
+        return " ".join(words)
+    stripped = re.sub(r"\s+", " ", re.sub(SALTS, " ", t)).strip()
+    return stripped or " ".join(words)
+
+
+# Where a medicine acts. Eye drops and a tablet of the same drug are not one medicine taken twice.
+_SITES = (("eye", r"ophthalmic|eye drop|eye ointment|eye gel|ocular"), ("ear", r"\bear\b|otic"), ("nose", r"nasal"),
+          ("vagina", r"vaginal"), ("mouth", r"mouthwash|oral gel|oral paste|mouth"),
+          ("skin", r"cream|ointment|lotion|topical|shampoo|\bgel\b|soap|scalp|dusting"))
+
+
+def site_of(form: str) -> str:
+    f = (form or "").lower()
+    return next((site for site, pat in _SITES if re.search(pat, f)), "body")
+
+
+# Narrow therapeutic index: small differences between brands matter, so no cheaper-brand hint is shown.
+NO_SWITCH = {"warfarin", "levothyroxine", "valproate", "divalproex", "phenytoin", "carbamazepine", "lithium", "digoxin",
+             "tacrolimus", "cyclosporine", "ciclosporin", "theophylline"}
 
 
 def _csv(name: str) -> list[dict]:
@@ -65,6 +91,14 @@ class Medicine:
     usable_for_red: bool = True
 
     @property
+    def site(self) -> str:
+        return site_of(self.form)
+
+    @property
+    def rx_docs(self) -> set[str]:
+        return {i.doc_id for i in self.sources if i.source == "rx"}
+
+    @property
     def doctors(self) -> list[str]:
         return sorted({i.doctor or i.doc_id for i in self.sources if i.source == "rx"})
 
@@ -85,16 +119,18 @@ class Medicine:
 
 @dataclass
 class Finding:
-    rule: str            # DUP_INGREDIENT | DUP_ASK_CURRENT | SAME_CLASS | DOSE_OVER | RISKY_PAIR | OTC_ONLY | CONFIRM_FIRST | UNKNOWN
+    rule: str            # DUP_INGREDIENT | DUP_ASK_CURRENT | DUP_SAME_RX | SAME_CLASS | DOSE_OVER | RISKY_PAIR | OTC_ONLY |
+                         # CONFIRM_FIRST | UNKNOWN
     severity: str        # red | amber | info
     meds: list[str]
     data: dict
     source: str
 
 
-# Rule switches (overridden by config/settings.json "rules"): dose limits stay off until a pharmacist reviews them;
-# "not on any prescription" is shown as a tag on the medicine, not as a finding.
-RULE_DEFAULTS = {"dose_limits": False, "not_on_rx_finding": False}
+# Rule switches (overridden by config/settings.json "rules"): dose limits stay off until a pharmacist reviews them
+# (a wrong number would raise a false red); "not on any prescription" is a tag on the medicine, not a finding;
+# listed risky pairs come from regulator labels and only ever ask (amber).
+RULE_DEFAULTS = {"dose_limits": False, "not_on_rx_finding": False, "risky_pairs": True}
 SEVERITIES = ("red", "amber", "info")
 
 
@@ -119,16 +155,17 @@ class Rules:
             p = self.g.product(it.product_id)
             ings = [(base_ingredient(n), mg) for n, _, mg in self.g.ingredients(p.id)]
             target = None
+            # an unconfirmed reading never merges: it would vanish into the confirmed one and never be asked about
+            same = [m for m in meds if m.product_id == p.id and m.usable_for_red] if it.confirmed else []
             if it.source in BAG_SOURCES:
                 # a strip joins the prescription line (any doctor) or strip with the same product
-                target = next((m for m in meds if m.product_id == p.id), None)
+                target = next(iter(same), None)
             elif it.source == "rx":
                 # a prescription line joins a strip of the same product, never another prescription
-                target = next((m for m in meds if m.product_id == p.id and not m.from_rx), None)
+                target = next((m for m in same if not m.from_rx), None)
             if target:
                 target.sources.append(it)
                 target.per_day = target.per_day if target.per_day is not None else it.per_day
-                target.usable_for_red = target.usable_for_red or it.confirmed
                 continue
             meds.append(Medicine(f"M{len(meds) + 1}", p.id, p.brand, p.strength, p.form, p.unit_price, ings, [it],
                                  it.per_day, it.confirmed))
@@ -145,16 +182,19 @@ class Rules:
         meds, findings = self.reconcile(items)
         # confirmed readings only, and never a medicine the family says is no longer taken
         usable = [m for m in meds if m.usable_for_red and m.taking != "stopped"]
-        by_ing: dict[str, list[Medicine]] = {}
+        by_ing: dict[str, list[Medicine]] = {}                 # medicines that act on the whole body: family, dose, pairs
+        by_site: dict[tuple[str, str], list[Medicine]] = {}    # duplicates: same ingredient at the same place
         for m in usable:
             for ing, _ in m.ingredients:
-                by_ing.setdefault(ing, []).append(m)
-        findings += self._duplicates(by_ing)
+                by_site.setdefault((ing, m.site), []).append(m)
+                if m.site == "body":
+                    by_ing.setdefault(ing, []).append(m)
+        findings += self._duplicates(by_site)
         findings += self._same_family(by_ing)
         if self.settings["dose_limits"]:
             findings += self._dose(by_ing)
         present = set(by_ing)
-        for p in self.pairs:
+        for p in self.pairs if self.settings["risky_pairs"] else []:
             if p["a"] in present and p["b"] in present:
                 ms = sorted({m.med_id for k in (p["a"], p["b"]) for m in by_ing[k]})
                 sev = p["severity"] if p["severity"] in SEVERITIES else "amber"
@@ -168,21 +208,29 @@ class Rules:
         findings.sort(key=lambda f: (order[f.severity], f.rule))
         return meds, findings
 
-    def _duplicates(self, by_ing: dict[str, list[Medicine]]) -> list[Finding]:
+    def _duplicates(self, by_site: dict[tuple[str, str], list[Medicine]]) -> list[Finding]:
         """One finding per group of medicines sharing ingredients (Napa Extra + Ace Plus share two: one finding).
-        Red only when every medicine in the group is taken now; otherwise ask the family first."""
+        Red only when every medicine in the group is taken now; otherwise ask the family first. When every medicine
+        comes from the SAME prescription (Farin 5 mg + Farin 1 mg making a 6 mg dose) the doctor may have meant it:
+        that is a question for the doctor, never a red that could make a family drop one."""
         groups: dict[tuple[str, ...], dict] = {}
-        for ing, ms in sorted(by_ing.items()):
+        for (ing, _site), ms in sorted(by_site.items()):
             if len(ms) >= 2:
                 key = tuple(m.med_id for m in ms)
                 groups.setdefault(key, {"meds": ms, "ingredients": []})["ingredients"].append(ing)
         out = []
         for key, grp in groups.items():
             ms = grp["meds"]
-            data = {"ingredients": grp["ingredients"], "ingredient": grp["ingredients"][0], "brands": [m.brand for m in ms],
+            names = [m.brand for m in ms]
+            if len(set(names)) < len(names):      # Farin 5 mg and Farin 1 mg, not "Farin and Farin"
+                names = [f"{m.brand} {m.strength}".strip() for m in ms]
+            data = {"ingredients": grp["ingredients"], "ingredient": grp["ingredients"][0], "brands": names,
                     "doctors": sorted({d for m in ms for d in m.doctors}),
                     "combination": [m.brand for m in ms if m.is_combination], "taking": [m.taking for m in ms]}
-            if all(m.taking == "current" for m in ms):
+            if all(m.from_rx for m in ms) and len(set().union(*(m.rx_docs for m in ms))) == 1:
+                out.append(Finding("DUP_SAME_RX", "amber", list(key), data,
+                                   "registry: brand → ingredient; both lines on one prescription"))
+            elif all(m.taking == "current" for m in ms):
                 out.append(Finding("DUP_INGREDIENT", "red", list(key), data, "registry: brand → ingredient"))
             else:
                 out.append(Finding("DUP_ASK_CURRENT", "amber", list(key), data,
@@ -230,7 +278,7 @@ class Rules:
     def cheaper(self, product_id: int, limit: int = 3) -> list[dict]:
         """Same ingredient set, same strength and form, lower listed unit price (information only)."""
         p = self.g.product(product_id)
-        if p.unit_price is None:
+        if p.unit_price is None or any(base_ingredient(n) in NO_SWITCH for n, _, _ in self.g.ingredients(p.id)):
             return []
         rows = self.g._q("SELECT id, brand, manufacturer, unit_price FROM product WHERE generic = ? AND strength = ? AND form = ? "
                          "AND unit_price IS NOT NULL AND unit_price < ? ORDER BY unit_price LIMIT ?",

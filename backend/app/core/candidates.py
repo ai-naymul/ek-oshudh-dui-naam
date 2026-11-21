@@ -31,8 +31,14 @@ BN_MAP = {
     "া": "a", "ি": "i", "ী": "i", "ু": "u", "ূ": "u", "ৃ": "ri", "ে": "e", "ৈ": "oi", "ো": "o", "ৌ": "ou", "্": "",
     "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9",
 }
+# Form words, abbreviated or in full; each also matches its plural ('tablets', 'Capsules'). The photo reader writes
+# the form out in full, and left in the name these words were matched as letters (tablets -> Nitalet).
 FORM_WORDS = {"tab": "tablet", "tablet": "tablet", "cap": "capsule", "capsule": "capsule", "syp": "syrup",
-              "syrup": "syrup", "susp": "suspension", "inj": "injection", "drop": "drops", "cream": "cream", "gel": "gel"}
+              "syrup": "syrup", "susp": "suspension", "suspension": "suspension", "inj": "injection",
+              "injection": "injection", "drop": "drops", "cream": "cream", "gel": "gel", "ointment": "ointment",
+              "solution": "solution", "sachet": "sachet", "powder": "powder", "lotion": "lotion", "spray": "spray",
+              "inhaler": "inhaler", "suppository": "suppository", "suppositorie": "suppository", "oral": None,
+              "film coated": None, "chewable": None, "effervescent": None}
 _NUM = re.compile(r"(\d+(?:\.\d+)?)")
 
 
@@ -49,9 +55,10 @@ def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
     t = transliterate(reading).lower()
     form = None
     for w, f in FORM_WORDS.items():
-        if re.search(rf"\b{w}\b\.?", t):
-            form = f
-            t = re.sub(rf"\b{w}\b\.?", " ", t)
+        pat = rf"\b{w}s?\b\.?"
+        if re.search(pat, t):
+            form = f or form
+            t = re.sub(pat, " ", t)
     # remove the dosing schedule and duration first, so "Ace 500 1+0+1" keeps 500 as the strength, not 1
     t = re.sub(r"(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)", " ", t)
     t = re.sub(r"\b(?:x\s*)?\d+\s*(?:din|days?|d|mas|months?)\b", " ", t)

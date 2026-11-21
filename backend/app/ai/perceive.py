@@ -75,6 +75,14 @@ def crop(data: bytes, box: list[int] | None, pad: float = 0.03, pad_x: float = 0
     return buf.getvalue()
 
 
+def name_agreement(text: str, others: list[str]) -> float:
+    """How closely the second reader wrote the same NAME (strength and form words left out), 0..1."""
+    from app.core.candidates import parse_hints
+    name = parse_hints(text)[0]
+    best = max((fuzz.ratio(name, parse_hints(o)[0]) for o in others), default=0)
+    return round(best / 100, 2)
+
+
 def read_image(data: bytes) -> dict:
     """Returns {kind, doctor_text, date_text, items[...] with 'agree' added, image (resized bytes), meta}."""
     small, size = _resize(data)
@@ -93,8 +101,7 @@ def read_image(data: bytes) -> dict:
             lite = {"items": []}
     lite_texts = [i.get("brand_text", "") for i in lite.get("items", [])]
     for it in main.get("items", []):
-        best = max((fuzz.ratio(it.get("brand_text", "").lower(), t.lower()) for t in lite_texts), default=0)
-        it["agree"] = round(best / 100, 2)
+        it["agree"] = name_agreement(it.get("brand_text", ""), lite_texts)
     return {"kind": main.get("kind", "other"), "doctor_text": main.get("doctor_text", ""),
             "date_text": main.get("date_text", ""), "items": main.get("items", []), "image": small,
             "size": size, "meta": meta}

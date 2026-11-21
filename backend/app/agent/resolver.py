@@ -7,8 +7,10 @@ in what order), so a small tool-using loop fits; everything that decides safety 
 Guardrails (all enforced in code, not by the prompt):
 - step budget: at most MAX_STEPS tool calls, then it must answer
 - tools are read-only lookups on our own registry and this case; there is no tool that changes anything
-- grounding: the suggested product must be one that a tool returned during this run; otherwise it is dropped
-- banned phrases: the Bangla reason may not tell anyone to stop/start a medicine or call anything safe
+- grounding: the suggested product must be one that a tool returned during THIS run (the starting options do not
+  count); otherwise it is dropped
+- the family never sees the model's own words: the reason shown is a fixed sentence built from the tool that found
+  the product; a model reason that sounds like advice (stop, skip, safe, no problem) drops the suggestion
 - it only SUGGESTS: the item still needs the user's confirmation, and every step goes into the case trace
 """
 from __future__ import annotations
@@ -18,7 +20,8 @@ import time
 from app.ai.gemini import LITE_MODEL, GeminiError, chat
 
 MAX_STEPS = 4
-BANNED = ("বন্ধ করুন", "খাবেন না", "নিরাপদ", "খেতে পারেন", "stop taking", "safe to")
+BANNED = ("বন্ধ", "বাদ দ", "বাদ দে", "খাবেন না", "খেলেই", "খেতে পারেন", "নিরাপদ", "সমস্যা নেই", "সমস্যা হবে না",
+          "ক্ষতি নেই", "দরকার নেই", "stop", "skip", "safe", "no problem", "not needed")
 
 TOOLS = [
     {"name": "find_brand", "description": "Search the Bangladesh medicine registry for a brand name (any spelling). "
@@ -78,7 +81,7 @@ class Resolver:
 
     def resolve(self, case, item) -> dict:
         """-> {"product_id": int|None, "reason_bn": str, "steps": [...], "grounded": bool}"""
-        seen_ids = {o["product_id"] for o in item.options}
+        seen_ids: dict[int, str] = {}   # product id -> the evidence that found it in this run
         contents = [{"role": "user", "parts": [{"text": PROMPT.format(
             reading=item.reading, alts=item.alternatives[:3], max_steps=MAX_STEPS,
             options=[f"{o['product_id']}: {o['brand']} {o['strength']} {o['form']}" for o in item.options])}]}]
@@ -97,12 +100,14 @@ class Resolver:
                     return self._finish(args if name == "answer" else {"product_id": 0, "reason_bn": ""}, seen_ids, steps)
                 if name == "find_brand":
                     out = self._find_brand(str(args.get("name", "")))
-                    seen_ids |= {p["product_id"] for p in out["products"]}
+                    for p in out["products"]:
+                        seen_ids.setdefault(p["product_id"], "registry")
                 elif name == "get_ingredients":
                     out = self._get_ingredients(args.get("product_id", 0))
                 elif name == "check_bag":
                     out = self._check_bag(case, item)
-                    seen_ids |= {m["product_id"] for m in out["medicines"]}
+                    for m in out["medicines"]:
+                        seen_ids[m["product_id"]] = f"bag:{m['source']}"
                 elif name == "compare_prices":
                     out = self._compare_prices(args.get("product_id", 0))
                 else:
@@ -113,7 +118,7 @@ class Resolver:
         return self._finish({"product_id": 0, "reason_bn": ""}, seen_ids, steps)
 
     @staticmethod
-    def _finish(args: dict, seen_ids: set, steps: list) -> dict:
+    def _finish(args: dict, seen_ids, steps: list) -> dict:
         try:
             pid = int(args.get("product_id") or 0)
         except (TypeError, ValueError):
@@ -122,7 +127,8 @@ class Resolver:
         grounded = pid in seen_ids
         if not grounded or any(b in reason.lower() for b in BANNED):
             return {"product_id": None, "reason_bn": "", "steps": steps, "grounded": False, "dropped": pid != 0}
-        return {"product_id": pid, "reason_bn": reason, "steps": steps, "grounded": True}
+        evidence = seen_ids.get(pid) if isinstance(seen_ids, dict) else None
+        return {"product_id": pid, "evidence": evidence, "steps": steps, "grounded": True}
 
 
 def safe_resolve(engine, case, item) -> dict:
