@@ -50,8 +50,9 @@ def explain(f: Finding, copy: dict | None = None) -> dict:
         en_fields.update(brands=w["and_en"].join(d["brands"]), each=w["each_two_en"] if two else w["each_many_en"],
                          ings=w["and_en"].join(ings))
     elif f.rule == "SAME_CLASS":
-        bn_fields.update(brands=_and(d["brands"], w), group_bn=d["group_bn"])
-        en_fields.update(brands=w["and_en"].join(d["brands"]), group=d["group"])
+        two = len(d["brands"]) == 2
+        bn_fields.update(brands=_and(d["brands"], w), group_bn=d["group_bn"], all=w["all_two_bn"] if two else w["all_many_bn"])
+        en_fields.update(brands=w["and_en"].join(d["brands"]), group=d["group"], all="both" if two else "all")
     elif f.rule == "DOSE_OVER":
         many = len(d["brands"]) > 1
         common = dict(total=d["total_mg"], max=d["max_mg"], ingredient=d["ingredient"].title())

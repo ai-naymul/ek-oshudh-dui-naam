@@ -51,14 +51,18 @@ function icon(ctx: CanvasRenderingContext2D, kind: 'morning' | 'noon' | 'night',
 const dose = (v: number | null) => (v === null ? '' : v === 0.5 ? '½' : bn(v))
 
 export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob> {
-  await Promise.all(['400', '600', '700'].map((w) => document.fonts.load(`${w} 40px "Hind Siliguri"`)))
-  await document.fonts.load('600 40px "Anek Bangla Variable"').catch(() => [])
+  // load the Bangla subsets too (fontsource splits Bengali into its own unicode-range face)
+  await Promise.all(['400', '600', '700'].map((w) => document.fonts.load(`${w} 40px "Hind Siliguri"`, 'অআক১')))
+  await document.fonts.load('600 40px "Anek Bangla Variable"', 'Napa অ').catch(() => [])
   const C = { ink: css('--color-ink', '#17251f'), muted: css('--color-muted', '#5b6a65'), rx: css('--color-rx', '#0b5d4b'),
     danger: css('--color-danger', '#c8382a'), warn: css('--color-warn', '#8a5000'), foil: css('--color-foil', '#dce3e0'),
     soft: { red: css('--color-danger-soft', '#fcedeb'), amber: css('--color-warn-soft', '#fbf1e1'), info: css('--color-paper', '#f6f8f7') } }
   const sevColor = { red: C.danger, amber: C.warn, info: C.muted }
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')!
+  if (typeof ctx.roundRect !== 'function') {   // older Safari: square corners instead of a crash
+    (ctx as CanvasRenderingContext2D).roundRect = function (x: number, y: number, w: number, h: number) { this.rect(x, y, w, h) }
+  }
   const inner = W - PAD * 2
   const blocks: Block[] = []
   const reds = r.findings.filter((f) => f.severity === 'red').length
@@ -96,7 +100,7 @@ export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob>
     const s = it?.schedule
     ctx.font = `400 30px ${BN}`
     const sub = wrap(ctx, m.path.ingredients.map((x) => x.name).join(' + '), inner)
-    const perDay = !s && m.per_day ? `দিনে ${bn(m.per_day)} বার` : ''
+    const perDay = !s && m.per_day ? t('sched.per_day', { n: bn(m.per_day) }) : ''
     blocks.push({ h: 56 + sub.length * 42 + (s ? 96 : perDay ? 46 : 0) + 26, draw: (c, y) => {
       c.fillStyle = C.ink; c.font = `600 38px ${PRINT}`; c.fillText(`${m.brand} ${m.strength}`, PAD, y + 44)
       c.fillStyle = C.muted; c.font = `400 30px ${BN}`
@@ -136,7 +140,7 @@ export async function drawCard(r: CheckResult, items: ItemView[]): Promise<Blob>
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, height)
   let y = PAD
   for (const b of blocks) { b.draw(ctx, y); y += b.h }
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob!), 'image/png'))
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('card could not be drawn'))), 'image/png'))
 }
 
 export function summaryText(r: CheckResult): string {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Loader2, X } from 'lucide-react'
 import { ApiError, api, type CheckResult, type Health, type ItemView, type Stats } from './api'
@@ -27,7 +27,11 @@ export default function App() {
     refreshCopy()
     api.stats().then(setStats).catch(() => setError(t('err.server_down')))
     loadHealth()
+    const h = window.setInterval(loadHealth, 30_000)
+    return () => window.clearInterval(h)
   }, [loadHealth, t])
+  const current = useRef<string | null>(null)
+  current.current = caseId
 
   // Opened by link (?case=...): continue that case: confirm screen if anything is unsure, else results.
   useEffect(() => {
@@ -73,11 +77,13 @@ export default function App() {
   }
 
   async function recheck() {
-    if (!caseId) return
+    const id = caseId
+    if (!id) return
     try {
-      const [r, c] = await Promise.all([api.check(caseId), api.getCase(caseId)])
+      const [r, c] = await Promise.all([api.check(id), api.getCase(id)])
+      if (current.current !== id) return          // a new check started meanwhile
       setResult(r); setItems(c.items)
-    } catch { setError(t('err.generic')) }
+    } catch { if (current.current === id) setError(t('err.generic')) }
   }
 
   const step = screen === 'case' ? (items.some((i) => i.needs_confirm) ? 1 : 0) : screen === 'results' ? 2 : null

@@ -21,8 +21,10 @@ export function Recorder({ onDone, onClose }: { onDone: (audio: Blob) => void; o
   useEffect(() => {
     let stream: MediaStream | null = null
     let timer: number | undefined
+    let cancelled = false
     if (!navigator.mediaDevices) { setError(tt('rec.unsupported')); return }
     navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => {
+      if (cancelled) { s.getTracks().forEach((tr) => tr.stop()); return }   // closed while the permission prompt was open
       stream = s
       const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((m) => MediaRecorder.isTypeSupported(m))
       const r = new MediaRecorder(s, type ? { mimeType: type } : undefined)
@@ -39,6 +41,7 @@ export function Recorder({ onDone, onClose }: { onDone: (audio: Blob) => void; o
       }), 1000)
     }).catch(() => setError(tt('rec.no_mic')))
     return () => {
+      cancelled = true
       window.clearInterval(timer)
       if (rec.current?.state === 'recording') rec.current.stop()
       stream?.getTracks().forEach((tr) => tr.stop())

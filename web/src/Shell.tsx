@@ -42,10 +42,12 @@ function useTextScale() {
            canSmaller: i > 0, canBigger: i < SCALES.length - 1 }
 }
 
+// Ready unless there is no key, or the most recent model call failed within the last two minutes.
 export function aiReady(h: Health | null) {
   if (!h) return false
   const { key_present, last_ok_at, last_error_at } = h.ai
-  return key_present && !(last_error_at && (!last_ok_at || last_error_at > last_ok_at))
+  const recentFailure = !!last_error_at && (!last_ok_at || last_error_at > last_ok_at) && Date.now() / 1000 - last_error_at < 120
+  return key_present && !recentFailure
 }
 
 const STEP_KEYS = ['steps.add', 'steps.confirm', 'steps.result']
@@ -63,7 +65,7 @@ export function TopBar({ step, onNew, health }: { step: number | null; onNew: ((
           <span className="display hidden whitespace-nowrap text-[1.1rem] text-rx-deep min-[400px]:inline">{t('app.name')}</span>
         </div>
         {step !== null && (
-          <ol className="mx-auto hidden items-center gap-1 lg:flex" aria-label="ধাপ">
+          <ol className="mx-auto hidden items-center gap-1 lg:flex" aria-label={t('steps.aria')}>
             {STEP_KEYS.map((k, i) => {
               const state = i < step ? 'done' : i === step ? 'now' : 'next'
               return (
@@ -88,7 +90,7 @@ export function TopBar({ step, onNew, health }: { step: number | null; onNew: ((
           </span>
           <div className="flex items-center rounded-full bg-white ring-1 ring-foil">
             <Press onClick={size.smaller} disabled={!size.canSmaller} aria-label={t('top.smaller')} className="grid h-11 w-10 place-items-center rounded-l-full disabled:opacity-35"><Minus size={16} /></Press>
-            <span aria-hidden className="text-[0.85rem] font-semibold">অ</span>
+            <span aria-hidden className="text-[0.85rem] font-semibold">{t('top.size_mark')}</span>
             <Press onClick={size.bigger} disabled={!size.canBigger} aria-label={t('top.bigger')} className="grid h-11 w-10 place-items-center rounded-r-full disabled:opacity-35"><Plus size={16} /></Press>
           </div>
           <Press onClick={() => setQr(true)} aria-label={t('top.qr')} className="flex h-11 items-center gap-1.5 rounded-full bg-white px-3 ring-1 ring-foil">

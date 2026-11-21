@@ -6,21 +6,23 @@
  },
  "words": {
   "and_bn": " আর ",
-  "list_sep_bn": "، ",
+  "list_sep_bn": ", ",
   "and_en": " and ",
   "each_two_bn": "দুটোতেই",
   "each_many_bn": "সবগুলোতেই",
   "each_two_en": "both",
   "each_many_en": "all",
-  "who_bn": " ({n} জন ডাক্তারের প্রেসক্রিপশন থেকে)",
+  "who_bn": "{n} জন ডাক্তারের প্রেসক্রিপশনে, ",
   "together_bn": "মিলে",
   "from_one_bn": "থেকে",
   "lead_many_en": "Together {brands} give",
-  "lead_one_en": "{brands} gives"
+  "lead_one_en": "{brands} gives",
+  "all_two_bn": "দুটোই",
+  "all_many_bn": "সবগুলোই"
  },
  "titles": {
   "DUP_INGREDIENT": {
-   "bn": "একই ওষুধ দুইবার",
+   "bn": "একই ওষুধ দুবার",
    "en": "Same medicine twice"
   },
   "DUP_ASK_CURRENT": {
@@ -54,19 +56,19 @@
  },
  "templates": {
   "DUP_INGREDIENT": {
-   "bn": "{brands}{who}: {each} একই উপাদান {ings} আছে। {ask}",
+   "bn": "{brands}: {who}{each} একই উপাদান {ings} আছে। {ask}",
    "en": "{brands} {each} contain {ings}. {ask}"
   },
   "DUP_ASK_CURRENT": {
-   "bn": "{brands}{who}: {each} একই উপাদান {ings} আছে। এগুলো কি এখন একসাথে খাচ্ছেন? প্রতিটি ওষুধে জানিয়ে দিন।",
+   "bn": "{brands}: {who}{each} একই উপাদান {ings} আছে। প্রতিটি ওষুধের পাশে জানান, এখন খাচ্ছেন কি না।",
    "en": "{brands} {each} contain {ings}. Are they being taken now? Mark each medicine."
   },
   "SAME_CLASS": {
-   "bn": "{brands} দুটোই {group_bn}। দুটোই দরকার কি না জেনে নিন। {ask}",
-   "en": "{brands} are both {group}. Ask whether both are needed. {ask}"
+   "bn": "{brands} {all} {group_bn}। {all} দরকার কি না জেনে নিন। {ask}",
+   "en": "{brands} are {all} {group}. Ask whether each is needed. {ask}"
   },
   "DOSE_OVER": {
-   "bn": "{brands} {joined} দিনে {total} মিলিগ্রাম {ingredient} হচ্ছে; সীমা {max} মিলিগ্রাম। {ask}",
+   "bn": "{brands} {joined} দিনে মোট {total} মিলিগ্রাম {ingredient} হচ্ছে; সর্বোচ্চ সীমা {max} মিলিগ্রাম। {ask}",
    "en": "{lead} {total} mg of {ingredient} a day; the limit is {max} mg. {ask}"
   },
   "RISKY_PAIR": {
@@ -74,15 +76,15 @@
    "en": "{note}. {ask}"
   },
   "OTC_ONLY": {
-   "bn": "{brand} কোনো প্রেসক্রিপশনে নেই। ডাক্তার জানেন কি না নিশ্চিত হোন। {ask}",
+   "bn": "{brand} কোনো প্রেসক্রিপশনে নেই। ডাক্তার এটা জানেন কি না, জিজ্ঞেস করে নিন। {ask}",
    "en": "{brand} is not on any prescription. Make sure the doctor knows. {ask}"
   },
   "CONFIRM_FIRST.voice": {
-   "bn": "কথায় শোনা নামটি নিশ্চিত নয়: এটা কি {brand}? তালিকা থেকে বেছে নিশ্চিত করুন।",
+   "bn": "কথায় শোনা নামটি নিশ্চিত নয়: এটা কি {brand}? তালিকা থেকে বেছে নিন।",
    "en": "The spoken name is not certain: is this {brand}? Please pick it from the list to confirm."
   },
   "CONFIRM_FIRST.text": {
-   "bn": "লেখা নামটি তালিকার সাথে পুরো মেলেনি: এটা কি {brand}? বেছে নিশ্চিত করুন।",
+   "bn": "লেখা নামটি তালিকার সাথে পুরো মেলেনি: এটা কি {brand}? তালিকা থেকে বেছে নিন।",
    "en": "The typed name does not fully match the registry: is this {brand}? Please confirm."
   },
   "CONFIRM_FIRST.handwritten": {
@@ -128,7 +130,7 @@
   "welcome.example_caption": "নিবন্ধিত তালিকায় {ingredient} আছে {n}টি নামে, যেমন {more}।",
   "welcome.example_prev": "আগের উদাহরণ",
   "welcome.example_next": "পরের উদাহরণ",
-  "welcome.tested": "বাংলাদেশি ডাক্তারদের হাতে লেখা {n}টি ওষুধের নামে পরীক্ষিত। নিশ্চিত না হলে অ্যাপ নিজে না ধরে আপনাকে জিজ্ঞেস করে।",
+  "welcome.tested": "বাংলাদেশি ডাক্তারদের হাতে লেখা {n}টি ওষুধের নামে পরীক্ষিত। অ্যাপ নিশ্চিত না হলে নিজে ধরে না নিয়ে আপনাকে জিজ্ঞেস করে।",
   "case.title": "ওষুধগুলো যোগ করুন",
   "case.sub": "এক বা একাধিক ডাক্তারের প্রেসক্রিপশন, বাড়িতে থাকা ওষুধের স্ট্রিপ, অথবা নাম বলে বা লিখে দিন।",
   "tile.rx": "প্রেসক্রিপশন",
@@ -170,7 +172,7 @@
   "status.current": "এখন খাচ্ছেন",
   "status.stopped": "বন্ধ করেছেন",
   "status.unsure": "নিশ্চিত নই",
-  "abstain.title": "আমি নিশ্চিত নই",
+  "abstain.title": "নামটি নিশ্চিত নয়",
   "abstain.photo": "ছবির লেখার সাথে মিলিয়ে সঠিকটি বেছে নিন",
   "abstain.other": "কোনটি বোঝাতে চেয়েছেন, বেছে নিন",
   "abstain.none": "কোনোটিই নয়, নাম লিখুন",
@@ -202,7 +204,7 @@
   "card.share": "পাঠান বা সেভ করুন",
   "card.sent": "পাঠানো হয়েছে",
   "card.saved": "ছবিটি ডাউনলোড হয়েছে",
-  "card.ok": "বড় কোনো সমস্যা পাওয়া যায়নি",
+  "card.ok": "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি",
   "card.show": "এই কার্ডটি ডাক্তার বা ফার্মাসিস্টকে দেখান।",
   "card.not_advice": "এটি ডাক্তারের পরামর্শের বিকল্প নয়।",
   "card.meds": "ওষুধের তালিকা",
@@ -215,7 +217,7 @@
   "meds.on_rx": "প্রেসক্রিপশনে আছে",
   "meds.not_on_rx": "প্রেসক্রিপশনে নেই, শুধু বাড়িতে আছে",
   "meds.month": "মাসে প্রায় ৳{n}",
-  "meds.cheaper": "একই ওষুধ কম দামে নিবন্ধিত আছে: {list}। বদলানোর আগে ডাক্তারকে জিজ্ঞেস করুন।",
+  "meds.cheaper": "একই উপাদান ও মাত্রার ওষুধ কম দামে নিবন্ধিত আছে: {list}। বদলানোর আগে ডাক্তার বা ফার্মাসিস্টকে জিজ্ঞেস করুন।",
   "how.title": "কীভাবে জানলাম",
   "how.steps": "এই যাচাইয়ের ধাপগুলো",
   "how.steps_sub": "অনুরোধ নং {id}, মোট {ms} মিলিসেকেন্ড",
@@ -262,6 +264,14 @@
   "qr.same_wifi": "ফোনটি এই ল্যাপটপের একই ওয়াই-ফাইতে থাকতে হবে।",
   "sample.badge": "নমুনা",
   "sample.note": "এটি নমুনা কেস: নামগুলো আগে থেকে লেখা, কিন্তু মিল আর সতর্কতা এখনই হিসাব হচ্ছে।",
-  "how.rules_out": "{n}টি ফলাফল"
+  "how.rules_out": "{n}টি ফলাফল",
+  "sched.slots": "দিনে {slots}",
+  "sched.per_day": "দিনে {n} বার",
+  "sched.after": "খাবারের পরে",
+  "sched.before": "খাবারের আগে",
+  "sched.days": "{n} দিন",
+  "steps.aria": "ধাপ",
+  "top.size_mark": "অ",
+  "how.try_placeholder": "Nappa, নাপা, Sec1o"
  }
 }

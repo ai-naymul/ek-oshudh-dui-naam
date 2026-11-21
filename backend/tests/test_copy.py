@@ -51,3 +51,17 @@ def test_the_app_gets_its_wording_from_the_same_file():
     from app.main import app
     served = TestClient(app).get("/api/copy").json()
     assert served["ui"] == json.load(open(COPY_PATH, encoding="utf-8"))["ui"]
+
+
+def test_copy_is_clean_unicode():
+    import re
+    import unicodedata
+    text = open(COPY_PATH, encoding="utf-8").read()
+    assert unicodedata.normalize("NFC", text) == text
+    assert not re.search("[،​‌‍﻿]", text), "Arabic comma or invisible character in the copy"
+
+
+def test_same_family_wording_counts_the_brands():
+    three = dict(SAMPLE["SAME_CLASS"], brands=["Seclo", "Maxpro", "Pantonix"])
+    assert "সবগুলোই" in explain(Finding("SAME_CLASS", "amber", ["M1"], three, "test"))["bn"]
+    assert "দুটোই" in explain(Finding("SAME_CLASS", "amber", ["M1"], SAMPLE["SAME_CLASS"], "test"))["bn"]

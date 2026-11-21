@@ -43,7 +43,7 @@ export function Results({ result, items, onBack, onRecheck }: {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
-        <Listen caseId={result.case_id} />
+        <Listen key={result.request_id} caseId={result.case_id} />
         <Press onClick={() => setCard(true)} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-rx px-4 text-[1.05rem] font-semibold text-white shadow-[0_10px_30px_-12px_rgba(11,93,75,0.6)]">
           <Share2 size={20} aria-hidden />{t('actions.card')}
         </Press>
@@ -110,9 +110,12 @@ function Slip({ f, i }: { f: Finding; i: number }) {
 function AskCard({ f, i, meds, caseId, onRecheck }: { f: Finding; i: number; meds: Medicine[]; caseId: string; onRecheck: () => Promise<void> }) {
   const t = useCopy()
   const [busy, setBusy] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
   async function set(m: Medicine, v: Taking) {
-    setBusy(m.med_id)
-    try { await Promise.all(m.items.map((iid) => api.status(caseId, iid, v))); await onRecheck() } finally { setBusy(null) }
+    setBusy(m.med_id); setErr(null)
+    try { await Promise.all(m.items.map((iid) => api.status(caseId, iid, v))); await onRecheck() }
+    catch { setErr(t('err.generic')) }
+    finally { setBusy(null) }
   }
   return (
     <motion.article className="relative overflow-hidden rounded-[18px] bg-warn-soft py-4 pl-6 pr-4" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.06 * i }}>
@@ -135,6 +138,7 @@ function AskCard({ f, i, meds, caseId, onRecheck }: { f: Finding; i: number; med
           </li>
         ))}
       </ul>
+      {err && <p role="alert" className="mt-2 text-[0.95rem] text-danger">{err}</p>}
     </motion.article>
   )
 }
@@ -168,23 +172,27 @@ function Listen({ caseId }: { caseId: string }) {
   const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
   const audio = useRef<HTMLAudioElement | null>(null)
   const url = useRef<string | null>(null)
-  useEffect(() => () => { audio.current?.pause(); if (url.current) URL.revokeObjectURL(url.current) }, [])
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false; audio.current?.pause(); if (url.current) URL.revokeObjectURL(url.current) } }, [])
   async function toggle() {
+    if (state === 'loading') return
     if (state === 'playing') { audio.current?.pause(); setState('idle'); return }
     setState('loading')
     try {
       if (!audio.current) {
-        url.current = URL.createObjectURL(await api.speech(caseId))
+        const blob = await api.speech(caseId)
+        if (!alive.current) return
+        url.current = URL.createObjectURL(blob)
         audio.current = new Audio(url.current)
         audio.current.onended = () => setState('idle')
       }
       audio.current.currentTime = 0
       await audio.current.play()
-      setState('playing')
-    } catch { setState('error') }
+      if (alive.current) setState('playing')
+    } catch { if (alive.current) setState('error') }
   }
   return (
-    <Press onClick={toggle} aria-label={t('actions.listen')} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-ink px-6 text-[1.05rem] font-semibold text-white">
+    <Press onClick={toggle} disabled={state === 'loading'} aria-busy={state === 'loading'} aria-label={t('actions.listen')} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-ink px-6 text-[1.05rem] font-semibold text-white">
       {state === 'loading' ? <Loader2 size={20} className="animate-spin" aria-hidden /> : state === 'playing' ? <Pause size={20} aria-hidden /> : <Volume2 size={20} aria-hidden />}
       <span className="whitespace-nowrap">{state === 'error' ? t('actions.retry') : state === 'playing' ? t('actions.stop') : t('actions.listen')}</span>
     </Press>
@@ -198,7 +206,7 @@ function CardSheet({ result, items, onClose }: { result: CheckResult; items: Ite
   const [note, setNote] = useState<string | null>(null)
   useEffect(() => {
     let u: string | null = null
-    drawCard(result, items).then((b) => { u = URL.createObjectURL(b); setBlob(b); setUrl(u) })
+    drawCard(result, items).then((b) => { u = URL.createObjectURL(b); setBlob(b); setUrl(u) }).catch(() => setNote(t('err.generic')))
     return () => { if (u) URL.revokeObjectURL(u) }
   }, [result, items])
   return (
@@ -315,7 +323,7 @@ function TryBrand() {
       <p className="text-[1.05rem] font-bold">{t('how.try')}</p>
       <p className="mt-1 text-[0.95rem] text-muted">{t('how.try_hint')}</p>
       <div className="mt-3 flex gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="Nappa, নাপা, Sec1o" aria-label={t('how.try')}
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder={t('how.try_placeholder')} aria-label={t('how.try')}
           className="print min-h-12 min-w-0 flex-1 rounded-xl bg-paper px-3 text-[1.05rem] outline-none focus:ring-2 focus:ring-rx/40" />
         <Press onClick={search} aria-label={t('how.try')} className="grid w-12 place-items-center rounded-xl bg-rx text-white"><Search size={18} aria-hidden /></Press>
         <Press onClick={random} aria-label={t('how.try_random')} className="grid w-12 place-items-center rounded-xl bg-ink text-white"><Shuffle size={18} aria-hidden /></Press>

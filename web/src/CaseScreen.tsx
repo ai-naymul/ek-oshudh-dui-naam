@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
 import { Recorder } from './Recorder'
@@ -35,6 +35,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const [repeat, setRepeat] = useState<Blob | null>(null)
   const [pending, setPending] = useState<Pending>(null)
   const ready = aiReady(health)
+  const noKey = health ? !health.ai.key_present : false
+  // late answers from a case that is no longer on screen must not land in the new one
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  const addItems = (more: ItemView[]) => { if (alive.current) setItems((prev) => [...prev, ...more]) }
+  const fail = (msg: string) => { if (alive.current) setError(msg) }
 
   // Remove with undo: the line disappears at once; the server forgets it after 5 s unless the person taps undo.
   const flushRemove = useCallback(async (p: Pending) => {
@@ -57,7 +63,8 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     setPending(null)
   }
   async function check() {
-    if (pending) { await flushRemove(pending); setPending(null) }
+    const p = pending
+    if (p) { setPending(null); await flushRemove(p) }
     onCheck()
   }
 
@@ -67,18 +74,20 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     setBusy({ kind: 'voice' })
     try {
       const res = await api.addVoice(caseId, audio)
+      if (!alive.current) return
       setHeard((h) => [...h, res.transcript])
-      setItems((prev) => [...prev, ...res.items])
-      if (!res.items.length) setError(tt('err.no_items_voice'))
-    } catch (e) { setError(errorText(e, 'voice')) }
-    setBusy(null)
+      addItems(res.items)
+      if (!res.items.length) fail(tt('err.no_items_voice'))
+    } catch (e) { fail(errorText(e, 'voice')) }
+    if (alive.current) setBusy(null)
   }, [caseId, setItems])
 
   async function addPhoto(blob: Blob, allowRepeat = false) {
     const res = await api.addImage(caseId, blob, allowRepeat)
+    if (!alive.current) return
     if (res.duplicate_of) { setRepeat(blob); return }
-    setItems((prev) => [...prev, ...res.items])
-    if (!res.items.length) setError(tt('err.no_items_photo'))
+    addItems(res.items)
+    if (!res.items.length) fail(tt('err.no_items_photo'))
   }
 
   async function onFiles(files: FileList | null) {
@@ -88,10 +97,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     for (const f of Array.from(files)) {
       const preview = URL.createObjectURL(f)
       setBusy({ kind: 'image', preview })
-      try { await addPhoto(await shrink(f)) } catch (e) { setError(errorText(e, 'image')) }
+      let small: Blob | null = null
+      try { small = await shrink(f) } catch { fail(tt('err.not_photo')) }   // e.g. a format the browser cannot open
+      if (small) { try { await addPhoto(small) } catch (e) { fail(errorText(e, 'image')) } }
       URL.revokeObjectURL(preview)
     }
-    setBusy(null)
+    if (alive.current) setBusy(null)
   }
 
   async function addRepeat() {
@@ -99,8 +110,8 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     const blob = repeat
     setRepeat(null)
     setBusy({ kind: 'image' })
-    try { await addPhoto(blob, true) } catch (e) { setError(errorText(e, 'image')) }
-    setBusy(null)
+    try { await addPhoto(blob, true) } catch (e) { fail(errorText(e, 'image')) }
+    if (alive.current) setBusy(null)
   }
 
   async function onText() {
@@ -109,11 +120,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     setBusy({ kind: 'text' })
     try {
       const res = await api.addText(caseId, text)
-      setItems((prev) => [...prev, ...res.items])
-      if (!res.items.length) setError(tt('err.no_items_text'))
+      if (!alive.current) return
+      addItems(res.items)
+      if (!res.items.length) fail(tt('err.no_items_text'))
       else { setText(''); setTyping(false) }
-    } catch (e) { setError(errorText(e, 'text')) }
-    setBusy(null)
+    } catch (e) { fail(errorText(e, 'text')) }
+    if (alive.current) setBusy(null)
   }
 
   const update = (v: ItemView) => setItems((prev) => prev.map((x) => (x.item_id === v.item_id ? v : x)))
@@ -128,12 +140,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <p className="mt-1 text-muted">{t('case.sub')}</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || !ready} onClick={() => rxInput.current?.click()} />
-        <Tile icon={<Camera />} label={t('tile.strip')} hint={t('tile.strip_hint')} disabled={!!busy || !ready} onClick={() => stripInput.current?.click()} />
-        <Tile icon={<Mic />} label={t('tile.voice')} hint={t('tile.voice_hint')} disabled={!!busy || !ready} onClick={() => setRecording(true)} />
+        <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || noKey} onClick={() => rxInput.current?.click()} />
+        <Tile icon={<Camera />} label={t('tile.strip')} hint={t('tile.strip_hint')} disabled={!!busy || noKey} onClick={() => stripInput.current?.click()} />
+        <Tile icon={<Mic />} label={t('tile.voice')} hint={t('tile.voice_hint')} disabled={!!busy || noKey} onClick={() => setRecording(true)} />
         <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => setTyping((v) => !v)} />
       </div>
-      {!ready && health && <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-[0.95rem] text-warn"><AlertCircle size={18} className="mt-0.5 shrink-0" />{t('err.ai_off')}</p>}
+      {!ready && <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-[0.95rem] text-warn"><AlertCircle size={18} className="mt-0.5 shrink-0" />{t('err.ai_off')}</p>}
       <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
       <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
       <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
@@ -249,10 +261,11 @@ function Tile({ icon, label, hint, onClick, active, disabled }: { icon: React.Re
 function StatusChips({ value, onChange, busy }: { value: Taking; onChange: (v: Taking) => void; busy: boolean }) {
   const t = useCopy()
   const opts: Taking[] = ['current', 'stopped', 'unsure']
+  const id = useId()
   return (
     <div className="mt-3">
-      <p id="status-label" className="mb-1.5 text-[0.95rem] text-muted">{t('status.label')}</p>
-      <div role="radiogroup" aria-labelledby="status-label" className="flex flex-wrap gap-2">
+      <p id={id} className="mb-1.5 text-[0.95rem] text-muted">{t('status.label')}</p>
+      <div role="radiogroup" aria-labelledby={id} className="flex flex-wrap gap-2">
         {opts.map((o) => (
           <Press key={o} role="radio" aria-checked={value === o} disabled={busy} onClick={() => onChange(o)}
             className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[0.95rem] font-semibold ring-1 ${value !== o ? 'bg-white text-ink ring-foil'
@@ -274,8 +287,8 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
   useEffect(() => setCropOk(true), [it.item_id])
   const s = it.schedule
   const slots = s && [s.morning, s.noon, s.night].some((v) => v !== null) ? `${bn(s.morning ?? 0)}+${bn(s.noon ?? 0)}+${bn(s.night ?? 0)}` : null
-  const chips = [slots ? `দিনে ${slots}` : s?.per_day ? `দিনে ${bn(s.per_day)} বার` : null,
-    s?.meal ? `খাবারের ${s.meal === 'after' ? 'পরে' : 'আগে'}` : null, s?.days ? `${bn(s.days)} দিন` : null].filter(Boolean) as string[]
+  const chips = [slots ? t('sched.slots', { slots }) : s?.per_day ? t('sched.per_day', { n: bn(s.per_day) }) : null,
+    s?.meal ? t(s.meal === 'after' ? 'sched.after' : 'sched.before') : null, s?.days ? t('sched.days', { n: bn(s.days) }) : null].filter(Boolean) as string[]
   const ink = it.handwritten || it.source === 'voice'
   const said = it.source === 'voice' ? t('item.read_voice') : it.source === 'text' ? t('item.read_text') : t('item.read_photo')
   const where = it.source === 'rx' ? (it.doctor && !/^D\d+$/.test(it.doctor) ? t('item.from_doctor', { doctor: it.doctor }) : t('item.from_rx')) : t('item.from_bag')
@@ -345,7 +358,7 @@ function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel
   }, [q, searching])
   const suggested = it.agent?.product_id
   const option = (o: Option) => (
-    <Press key={o.product_id} disabled={saving} onClick={() => onChoose(o.product_id)} aria-pressed={suggested === o.product_id}
+    <Press key={o.product_id} disabled={saving} onClick={() => onChoose(o.product_id)}
       className={`print flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 text-left ring-1 ${suggested === o.product_id ? 'bg-rx-soft ring-2 ring-rx' : 'bg-white ring-foil'}`}>
       <span className="min-w-0"><span className="text-[1.1rem] font-semibold">{o.brand}</span> <span className="text-muted">{o.strength}</span>
         <span className="block truncate text-[0.85rem] text-muted">{o.form}{o.maker ? `, ${o.maker}` : ''}</span></span>
