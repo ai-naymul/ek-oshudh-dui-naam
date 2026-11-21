@@ -48,19 +48,15 @@ def image_part(path_or_bytes, mime: str | None = None) -> dict:
     return {"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}}
 
 
-def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, thinking: str | None = "low",
-             retries: int = 3, timeout: int = 120) -> tuple[object, dict]:
-    """Returns (parsed JSON or text, meta={model, seconds, tokens}). Raises GeminiError on hard failure."""
+def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse) -> tuple[object, dict]:
+    """One generateContent call with retry/backoff; parse(candidate) turns the response into the result."""
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise GeminiError("GEMINI_API_KEY is not set")
-    gc: dict = {"temperature": 0}
-    if schema is not None:
-        gc["responseMimeType"] = "application/json"
-        gc["responseSchema"] = schema
-    if thinking and "lite" not in model:
-        gc["thinkingConfig"] = {"thinkingLevel": thinking}
-    body = json.dumps({"contents": [{"role": "user", "parts": parts}], "generationConfig": gc}).encode()
+    payload: dict = {"contents": [{"role": "user", "parts": parts}]}
+    if gc:
+        payload["generationConfig"] = gc
+    body = json.dumps(payload).encode()
     last = ""
     for attempt in range(retries + 1):
         req = urllib.request.Request(URL.format(model=model), data=body,
@@ -69,11 +65,10 @@ def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, t
         try:
             with _SEM:
                 resp = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
-            cand = resp["candidates"][0]
-            text = "".join(p.get("text", "") for p in cand["content"]["parts"] if not p.get("thought"))
+            result = parse(resp["candidates"][0])
             meta = {"model": model, "seconds": round(time.time() - t0, 2),
                     "tokens": resp.get("usageMetadata", {}).get("totalTokenCount")}
-            return (json.loads(text) if schema is not None else text), meta
+            return result, meta
         except urllib.error.HTTPError as e:
             last = f"HTTP {e.code}: {e.read().decode()[:200]}"
             if e.code in (429, 500, 502, 503, 504) and attempt < retries:
@@ -87,3 +82,34 @@ def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, t
                 time.sleep(1.5 * (attempt + 1))
                 continue
     raise GeminiError(f"{model} failed: {last}")
+
+
+def _text(cand: dict) -> str:
+    return "".join(p.get("text", "") for p in cand["content"]["parts"] if not p.get("thought"))
+
+
+def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, thinking: str | None = "low",
+             retries: int = 3, timeout: int = 120) -> tuple[object, dict]:
+    """Returns (parsed JSON or text, meta={model, seconds, tokens}). Raises GeminiError on hard failure."""
+    gc: dict = {"temperature": 0}
+    if schema is not None:
+        gc["responseMimeType"] = "application/json"
+        gc["responseSchema"] = schema
+    if thinking and "lite" not in model:
+        gc["thinkingConfig"] = {"thinkingLevel": thinking}
+    return _post(model, parts, gc, retries, timeout, lambda c: json.loads(_text(c)) if schema is not None else _text(c))
+
+
+def transcribe(parts: list, model: str, retries: int = 2, timeout: int = 60) -> tuple[str, dict]:
+    """Speech-to-text model: audio part(s) in, plain text out (no generation config)."""
+    return _post(model, parts, {}, retries, timeout, _text)
+
+
+def speak(text: str, model: str, voice: str, retries: int = 2, timeout: int = 90) -> tuple[tuple[bytes, str], dict]:
+    """Text-to-speech model: returns ((audio bytes, mime type), meta)."""
+    gc = {"responseModalities": ["AUDIO"], "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}
+
+    def parse(cand):
+        part = next(p for p in cand["content"]["parts"] if "inlineData" in p)["inlineData"]
+        return base64.b64decode(part["data"]), part.get("mimeType", "audio/wav")
+    return _post(model, [{"text": text}], gc, retries, timeout, parse)

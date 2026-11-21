@@ -38,3 +38,26 @@ def test_meal_duration_and_flags():
 def test_empty_is_unknown_not_zero():
     s = parse("")
     assert s.per_day is None and s.meal is None
+
+
+@pytest.mark.parametrize("text,per_day,slots", [
+    ("দিনে দুইবার", 2, (None, None, None)),
+    ("দিনে দু'বার খাবারের পরে", 2, (None, None, None)),
+    ("দিনে একবার", 1, (None, None, None)),
+    ("দিনে তিন বার", 3, (None, None, None)),
+    ("twice daily", 2, (None, None, None)),
+    ("once a day", 1, (None, None, None)),
+    ("রাতে", 1, (None, None, 1)),
+    ("সকালে ও রাতে", 2, (1, None, 1)),
+    ("সকালে একটা, রাতে একটা", 2, (1, None, 1)),
+    ("at night", 1, (None, None, 1)),
+    ("ঘুমানোর আগে", 1, (None, None, 1)),
+])
+def test_spoken_schedules(text, per_day, slots):
+    s = parse(text)
+    assert s.per_day == per_day and (s.morning, s.noon, s.night) == slots
+
+
+def test_same_word_inside_other_words_is_not_a_number():
+    # 'একই' (same) must not become a dose
+    assert parse("একই ওষুধ").per_day is None

@@ -1,6 +1,7 @@
 """Parse a dosing schedule written on a Bangladeshi prescription or said in a voice note.
 
-Handles: '1+0+1', '1-0-1', '১+০+১', '½+0+½'; 'দিনে ২ বার'; 'সকালে/দুপুরে/রাতে ১টা';
+Handles: '1+0+1', '1-0-1', '১+০+১', '½+0+½'; 'দিনে ২ বার', 'দিনে দুইবার', 'twice daily'; 'সকালে/দুপুরে/রাতে ১টা' and
+a time of day on its own ('রাতে', 'সকালে ও রাতে', 'at night');
 BD/TDS/TID/OD/QID/HS/SOS/PRN; before/after meals; duration ('৭ দিন', 'x 7 days', '১ মাস', 'চলবে').
 Deterministic: the same text always gives the same schedule.
 """
@@ -37,8 +38,25 @@ def _num(tok: str) -> float:
     return float(tok) if tok else 0.0
 
 
+# Spoken numbers before 'বার/টা' (times/pieces) and English frequency words, turned into digits first.
+_BN_NUM_WORDS = {"এক": "1", "দুই": "2", "দু": "2", "তিন": "3", "চার": "4"}
+_EN_FREQ = {"once": "1 times", "twice": "2 times", "thrice": "3 times", "one time": "1 times", "two times": "2 times",
+            "three times": "3 times", "four times": "4 times"}
+# Time-of-day words: on their own they mean one dose at that time.
+_SLOTS = (("সকালে", "morning"), ("সকাল", "morning"), ("দুপুরে", "noon"), ("দুপুর", "noon"), ("রাতে", "night"),
+          ("রাত্রে", "night"), ("ঘুমানোর আগে", "night"), ("morning", "morning"), ("noon", "noon"), ("lunch", "noon"),
+          ("night", "night"), ("bedtime", "night"))
+
+
+def _words_to_digits(t: str) -> str:
+    t = re.sub(r"(এক|দুই|দু|তিন|চার)\s*['’]?\s*(বার|টা|টি|টো)", lambda m: f"{_BN_NUM_WORDS[m.group(1)]} {m.group(2)}", t)
+    for word, digits in _EN_FREQ.items():
+        t = re.sub(rf"\b{word}\b", digits, t)
+    return t
+
+
 def parse(text: str) -> Schedule:
-    t = unicodedata.normalize("NFC", text or "").translate(BN_DIGITS).lower()
+    t = _words_to_digits(unicodedata.normalize("NFC", text or "").translate(BN_DIGITS).lower())
     s = Schedule()
     m = re.search(r"(½|1/2|¼|\d+(?:\.\d+)?)\s*[+\-–]\s*(½|1/2|¼|\d+(?:\.\d+)?)\s*[+\-–]\s*(½|1/2|¼|\d+(?:\.\d+)?)", t)
     if m:
@@ -48,10 +66,11 @@ def parse(text: str) -> Schedule:
         m = re.search(r"(?:দিনে|daily|a day|per day)?\s*(\d+)\s*(?:বার|times?|x)\s*(?:দিনে|daily|a day|per day)?", t)
         if m and re.search(r"দিনে|daily|a day|per day|বার", t):
             s.per_day = float(m.group(1))
-        for word, slot in (("সকালে", "morning"), ("দুপুরে", "noon"), ("রাতে", "night"), ("morning", "morning"), ("night", "night")):
+        for word, slot in _SLOTS:
+            if getattr(s, slot) is not None or word not in t:
+                continue
             mm = re.search(rf"{word}\s*(\d+(?:\.\d+)?)", t)
-            if mm:
-                setattr(s, slot, float(mm.group(1)))
+            setattr(s, slot, float(mm.group(1)) if mm else 1.0)
         if s.per_day is None and any(v is not None for v in (s.morning, s.noon, s.night)):
             s.per_day = sum(v or 0 for v in (s.morning, s.noon, s.night))
         if s.per_day is None:

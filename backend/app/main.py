@@ -70,6 +70,38 @@ class TextIn(BaseModel):
     text: str
 
 
+MAX_AUDIO = 5 * 1024 * 1024
+
+
+@app.post("/api/cases/{case_id}/voice")
+async def add_voice(case_id: str, file: UploadFile = File(...)):
+    t0 = time.time()
+    case = _case(case_id)
+    data = await file.read()
+    if not data or len(data) > MAX_AUDIO:
+        raise HTTPException(413, "voice note must be under 5 MB")
+    from app.ai.gemini import GeminiError
+    try:
+        out = engine().add_voice(case, data, file.content_type or "audio/webm")
+    except ValueError as e:
+        raise HTTPException(415, str(e))
+    except GeminiError as e:
+        raise HTTPException(502, f"could not transcribe: {e}")
+    return live(out, t0)
+
+
+@app.get("/api/cases/{case_id}/speech")
+def case_speech(case_id: str):
+    """Bangla voice reply for this case's findings (template text only)."""
+    case = _case(case_id)
+    from app.ai.gemini import GeminiError
+    try:
+        audio, mime, text = engine().speech(case)
+    except GeminiError as e:
+        raise HTTPException(502, f"could not create speech: {e}")
+    return Response(audio, media_type=mime, headers={"Cache-Control": "no-store", "X-Request-Id": uuid.uuid4().hex[:12]})
+
+
 @app.post("/api/cases/{case_id}/text")
 def add_text(case_id: str, body: TextIn):
     t0 = time.time()

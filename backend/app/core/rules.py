@@ -34,6 +34,10 @@ def _csv(name: str) -> list[dict]:
     return list(csv.DictReader(open(path, encoding="utf-8"))) if os.path.exists(path) else []
 
 
+# What the person has at home: strip/box photos, typed names and spoken names. Prescription lines are "rx".
+BAG_SOURCES = ("strip", "text", "voice")
+
+
 @dataclass
 class Item:
     item_id: str
@@ -97,7 +101,7 @@ class Rules:
             p = self.g.product(it.product_id)
             ings = [(base_ingredient(n), mg) for n, _, mg in self.g.ingredients(p.id)]
             target = None
-            if it.source == "strip":
+            if it.source in BAG_SOURCES:
                 # a strip joins the prescription line (any doctor) or strip with the same product
                 target = next((m for m in meds if m.product_id == p.id), None)
             elif it.source == "rx":
@@ -112,8 +116,10 @@ class Rules:
                                  it.per_day, it.confirmed))
         for m in meds:
             if not m.usable_for_red:
-                findings.append(Finding("CONFIRM_FIRST", "info", [m.med_id], {"brand": m.brand},
-                                        "handwritten reading below the confidence threshold"))
+                first = m.sources[0]
+                findings.append(Finding("CONFIRM_FIRST", "info", [m.med_id],
+                                        {"brand": m.brand, "source": first.source, "handwritten": first.handwritten},
+                                        "reading below the confidence threshold, not yet confirmed by the user"))
         return meds, findings
 
     # ---------- rules ----------

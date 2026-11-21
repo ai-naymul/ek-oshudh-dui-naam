@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle } from 'lucide-react'
+import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote } from 'lucide-react'
+import { Recorder } from './Recorder'
 import { api, bn, shrink, type ItemView } from './api'
 
 const spring = { type: 'spring' as const, bounce: 0, duration: 0.45 }
@@ -16,6 +17,23 @@ export function CaseScreen({ caseId, items, setItems, onCheck }: {
   const [error, setError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [heard, setHeard] = useState<string[]>([])
+
+  const onVoice = useCallback(async (audio: Blob) => {
+    setRecording(false)
+    setError(null)
+    setBusy({ kind: 'text', label: 'কথা শোনা হচ্ছে' })
+    try {
+      const res = await api.addVoice(caseId, audio)
+      setHeard((h) => [...h, res.transcript])
+      setItems((prev) => [...prev, ...res.items])
+      if (!res.items.length) setError('কোনো ওষুধের নাম শোনা যায়নি। আরেকবার ধীরে বলুন, বা লিখে দিন।')
+    } catch (e) {
+      setError(`শোনা যায়নি: ${(e as Error).message}`)
+    }
+    setBusy(null)
+  }, [caseId, setItems])
 
   async function onFiles(files: FileList | null, label: string) {
     if (!files?.length) return
@@ -60,11 +78,18 @@ export function CaseScreen({ caseId, items, setItems, onCheck }: {
       <h2 className="display text-[1.6rem]">ওষুধগুলো যোগ করুন</h2>
       <p className="text-muted">এক বা একাধিক ডাক্তারের প্রেসক্রিপশন, ওষুধের স্ট্রিপ, অথবা নাম লিখে দিন।</p>
 
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         <Tile icon={<FileText />} label="প্রেসক্রিপশন" onClick={() => rxInput.current?.click()} />
         <Tile icon={<Camera />} label="স্ট্রিপ / বাক্স" onClick={() => stripInput.current?.click()} />
+        <Tile icon={<Mic />} label="বলুন" onClick={() => setRecording(true)} />
         <Tile icon={<Keyboard />} label="লিখে দিন" onClick={() => setTyping((v) => !v)} />
       </div>
+      <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
+      {heard.map((h, i) => (
+        <motion.p key={i} className="mt-3 flex gap-2 rounded-2xl bg-white p-3 text-[15px] ring-1 ring-line" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
+          <Quote size={16} className="mt-1 shrink-0 text-brand" /><span><span className="text-muted">শুনেছি: </span>{h}</span>
+        </motion.p>
+      ))}
       <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files, 'প্রেসক্রিপশন পড়া হচ্ছে'); e.target.value = '' }} />
       <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files, 'স্ট্রিপ পড়া হচ্ছে'); e.target.value = '' }} />
 
@@ -98,9 +123,9 @@ export function CaseScreen({ caseId, items, setItems, onCheck }: {
         </AnimatePresence>
       </div>
 
-      <div className="glass fixed inset-x-0 bottom-0 border-t border-white/60 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
+      <div className="glass-strong fixed inset-x-0 bottom-0 border-t border-line px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto max-w-xl">
-          {unconfirmed > 0 && <p className="mb-2 text-center text-sm text-warn">{bn(unconfirmed)}টি ওষুধ নিশ্চিত করা বাকি: নিশ্চিত না করলে সেগুলো লাল সতর্কতায় ধরা হবে না</p>}
+          {unconfirmed > 0 && <p className="mb-2 whitespace-nowrap text-center text-sm font-semibold text-warn">{bn(unconfirmed)}টি ওষুধ নিশ্চিত করা বাকি</p>}
           <motion.button whileTap={{ scale: 0.97 }} disabled={!items.length || !!busy} onClick={onCheck}
             className="w-full rounded-2xl bg-ink py-4 text-lg font-semibold text-white disabled:opacity-40">
             মিলিয়ে দেখুন {items.length ? `(${bn(items.length)}টি ওষুধ)` : ''}
@@ -111,40 +136,44 @@ export function CaseScreen({ caseId, items, setItems, onCheck }: {
   )
 }
 
+const SOURCE_WORD: Record<string, string> = { rx: 'লেখা আছে', strip: 'লেখা আছে', voice: 'শোনা গেছে', text: 'লিখেছেন' }
+
 function Tile({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <motion.button whileTap={{ scale: 0.95 }} transition={{ duration: 0.1 }} onClick={onClick}
-      className="card flex flex-col items-center gap-2 px-2 py-4 text-[15px] font-semibold text-ink">
-      <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>{label}
+      className="card flex items-center gap-3 px-3 py-3.5 text-[16px] font-semibold text-ink">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </motion.button>
   )
 }
 
 function ItemCard({ caseId, it, onChoose }: { caseId: string; it: ItemView; onChoose: (pid: number | null) => void }) {
   const sched = it.schedule
-  const slots = sched && sched.morning !== null ? `${bn(sched.morning ?? 0)}+${bn(sched.noon ?? 0)}+${bn(sched.night ?? 0)}` : null
+  const slots = sched && [sched.morning, sched.noon, sched.night].some((v) => v !== null) ? `${bn(sched.morning ?? 0)}+${bn(sched.noon ?? 0)}+${bn(sched.night ?? 0)}` : null
   return (
     <div className={`card p-4 ${it.needs_confirm ? 'ring-2 ring-warn/50' : ''}`}>
       <div className="flex gap-3">
         {it.has_crop ? <img src={api.cropUrl(caseId, it.item_id)} alt={`লেখা: ${it.reading}`} className="h-14 w-24 shrink-0 rounded-lg border border-line object-contain bg-paper" />
-          : <div className="grid h-14 w-24 shrink-0 place-items-center rounded-lg bg-paper text-xs text-muted">{it.source === 'text' ? 'লেখা' : 'ছবি'}</div>}
+          : <div className="grid h-14 w-24 shrink-0 place-items-center rounded-lg bg-paper text-muted">{it.source === 'voice' ? <Mic size={20} /> : <Keyboard size={20} />}</div>}
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted">লেখা আছে: <span className="font-sans text-ink">{it.reading || '—'}</span>{it.handwritten && ' · হাতের লেখা'}</p>
+          <p className="text-xs text-muted">{SOURCE_WORD[it.source] ?? 'লেখা আছে'}: <span className="font-sans text-ink">{it.reading || '—'}</span>{it.handwritten && ' · হাতের লেখা'}</p>
           {it.chosen ? <p className="truncate font-sans text-lg font-bold">{it.chosen.brand} <span className="text-base font-medium text-muted">{it.chosen.strength}</span></p>
             : <p className="font-semibold text-danger">তালিকায় পাওয়া যায়নি</p>}
         </div>
         {!it.needs_confirm && it.chosen && <Check className="shrink-0 text-brand" />}
       </div>
-      {(slots || sched?.meal || sched?.days) && (
+      {(slots || sched?.per_day || sched?.meal || sched?.days) && (
         <div className="mt-2 flex flex-wrap gap-1.5 text-[13px]">
           {slots && <span className="whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-0.5 text-brand">দিনে {slots}</span>}
+          {!slots && sched?.per_day && <span className="whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-0.5 text-brand">দিনে {bn(sched.per_day)} বার</span>}
           {sched?.meal && <span className="whitespace-nowrap rounded-full bg-paper px-2.5 py-0.5 text-muted">খাবারের {sched.meal === 'after' ? 'পরে' : 'আগে'}</span>}
           {sched?.days && <span className="whitespace-nowrap rounded-full bg-paper px-2.5 py-0.5 text-muted">{bn(sched.days)} দিন</span>}
         </div>
       )}
       {it.needs_confirm && (
         <div className="mt-3">
-          <p className="mb-2 text-sm font-semibold text-warn">এটা কোনটা? ছবির সাথে মিলিয়ে বেছে নিন</p>
+          <p className="mb-2 text-sm font-semibold text-warn">{it.has_crop ? 'এটা কোনটা? ছবির সাথে মিলিয়ে বেছে নিন' : 'এটা কোনটা? বেছে নিন'}</p>
           <div className="flex flex-wrap gap-2">
             {it.options.map((o) => (
               <motion.button key={o.product_id} whileTap={{ scale: 0.95 }} onClick={() => onChoose(o.product_id)}

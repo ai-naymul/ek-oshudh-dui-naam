@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { AlertTriangle, AlertOctagon, Info, Search, Shuffle, Share2, X, Loader2 } from 'lucide-react'
+import { AlertTriangle, AlertOctagon, Info, Search, Shuffle, Share2, X, Loader2, Volume2, Pause } from 'lucide-react'
 import { drawCard, shareCard } from './card'
 import { api, bn, type CheckResult, type Path } from './api'
 import { MedicineGraph } from './Welcome'
@@ -47,10 +47,13 @@ export function Results({ result, onBack }: { result: CheckResult; onBack: () =>
               )
             })}
           </div>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setCard(true)}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-lg shadow-brand/20">
-            <Share2 size={20} /> ছবি কার্ড · হোয়াটসঅ্যাপে পাঠান
-          </motion.button>
+          <div className="mt-4 grid grid-cols-[auto_1fr] gap-3">
+            <Listen caseId={result.case_id} />
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => setCard(true)}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-lg shadow-brand/20">
+              <Share2 size={20} /> <span className="whitespace-nowrap">ছবি কার্ড · শেয়ার</span>
+            </motion.button>
+          </div>
           <AnimatePresence>{card && <CardSheet result={result} onClose={() => setCard(false)} />}</AnimatePresence>
           <h3 className="mt-6 text-lg font-bold">আপনার ওষুধগুলো</h3>
           <div className="mt-2 space-y-2">
@@ -68,6 +71,32 @@ export function Results({ result, onBack }: { result: CheckResult; onBack: () =>
         </>
       ) : <Proof result={result} />}
     </motion.main>
+  )
+}
+
+// Bangla voice reply: the template text of the findings, spoken by the TTS model on the server.
+function Listen({ caseId }: { caseId: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
+  const audio = useRef<HTMLAudioElement | null>(null)
+  useEffect(() => () => { audio.current?.pause() }, [])
+  async function toggle() {
+    if (state === 'playing') { audio.current?.pause(); setState('idle'); return }
+    setState('loading')
+    try {
+      const blob = await api.speech(caseId)
+      const a = new Audio(URL.createObjectURL(blob))
+      a.onended = () => setState('idle')
+      audio.current = a
+      await a.play()
+      setState('playing')
+    } catch { setState('error') }
+  }
+  return (
+    <motion.button whileTap={{ scale: 0.95 }} onClick={toggle} aria-label="বাংলায় শুনুন"
+      className="flex items-center gap-2 rounded-2xl bg-ink px-4 py-4 text-lg font-semibold text-white">
+      {state === 'loading' ? <Loader2 size={20} className="animate-spin" /> : state === 'playing' ? <Pause size={20} /> : <Volume2 size={20} />}
+      <span className="whitespace-nowrap">{state === 'error' ? 'আবার' : 'শুনুন'}</span>
+    </motion.button>
   )
 }
 

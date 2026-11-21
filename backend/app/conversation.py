@@ -17,6 +17,7 @@ from app.core import explain_bn
 from app.core.candidates import Candidate, CandidateIndex
 from app.core.graph import ROOT, Graph
 from app.core.rerank import distinct_brands, r1, r3
+from app.core.decide import Decider, products_per_brand
 from app.core.rules import Item, Rules
 from app.core.schedule import parse as parse_schedule
 
@@ -71,6 +72,10 @@ class Engine:
         self.index = CandidateIndex(self.graph)
         self.rules = Rules(self.graph)
         self.policy = load_policy()
+        self.decider = None
+        if self.policy.get("method", "").startswith("R2") and Decider.available():
+            self.decider = Decider()
+            self.ppb = products_per_brand(self.graph)
         self.cases: dict[str, Case] = {}
         self.lock = threading.Lock()
 
@@ -97,6 +102,9 @@ class Engine:
                 for c in distinct_brands(cands, k)]
 
     def match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
+        """-> (chosen product or None, confidence, method, needs_confirm, candidates in display order)."""
+        if self.decider is not None:
+            return self._match_r2(reading, alternatives, crop_parts)
         cands = self.index.search(reading, 20)
         seen = {c.product_id for c in cands}
         for alt in alternatives[:3]:
@@ -117,6 +125,26 @@ class Engine:
             if third.candidate:
                 return third.candidate, third.confidence, "R3", True, cands
         return first.candidate, first.confidence, "R1", True, cands
+
+    def _match_r2(self, reading: str, alternatives: list[str], crop_parts: list | None) -> tuple:
+        """Shipped policy from E1 (models/policy.json): accept when the decision model is sure; otherwise ask the
+        constrained AI to pick from the model's top-5 and accept only if it independently agrees; else ask the user."""
+        cands, ranked = self.decider.rank_reading(self.index, reading, alternatives, self.ppb)
+        if not ranked:
+            return None, 0.0, "none", True, []
+        order = [c for c, _ in ranked] + [c for c in cands if c.brand not in {x.brand for x, _ in ranked}]
+        top, p = ranked[0]
+        if p >= self.policy["r2_accept"]:
+            return top, round(p, 3), "R2", False, order
+        if crop_parts:
+            third = r3(crop_parts, [c for c, _ in ranked[:5]], k=5)
+            agree_min = self.policy.get("agree_min")
+            if third.candidate and third.candidate.brand == top.brand and agree_min is not None and p >= agree_min:
+                return top, round(p, 3), "R2+R3 agree", False, order
+            if third.candidate:  # disagreement: show the AI's pick first, but the user decides
+                order = [third.candidate] + [c for c in order if c.brand != third.candidate.brand]
+                return third.candidate, round(p, 3), "R2/R3 disagree", True, order
+        return top, round(p, 3), "R2 unsure", True, order
 
     # ---------- inputs ----------
     def add_image(self, case: Case, data: bytes) -> dict:
@@ -162,6 +190,43 @@ class Engine:
                       chosen=self.options_brand(ci))
         return {"items": [self.item_view(i) for i in new]}
 
+    def add_voice(self, case: Case, data: bytes, mime: str) -> dict:
+        """Voice note -> transcript (shown verbatim) -> medicine mentions -> catalog matcher. Spoken brand names are
+        short and easy to mishear (e.g. 'Ace'), so every spoken item waits for the user's one-tap confirmation."""
+        from app.ai.speech import audio_to_text, mentions
+        t0 = time.time()
+        transcript, meta = audio_to_text(data, mime)
+        case.step("transcribe", t0, model=meta.get("model"), chars=len(transcript))
+        t1 = time.time()
+        found, meta2 = mentions(transcript)
+        case.step("extract", t1, mentions=len(found), model=meta2.get("model"))
+        new = []
+        for m in found:
+            t2 = time.time()
+            said, latin = (m.get("name_as_said") or "").strip(), (m.get("name_english_letters") or "").strip()
+            reading = " ".join(x for x in (latin or said, m.get("strength_text", "")) if x)
+            alts = [a for a in (said, latin) if a and a != (latin or said)]
+            sched_text = m.get("schedule_text", "") or ""
+            sched = parse_schedule(sched_text)
+            chosen, conf, method, _, cands = self.match(reading, alts, None, False)
+            ci = CaseItem(f"I{len(case.items) + 1}", "voice", "voice", said or latin, alts, m.get("strength_text", ""),
+                          sched_text, False, None, self._options(cands), chosen.product_id if chosen else None,
+                          round(conf, 3), method, True, sched.per_day, sched.to_dict(), None)
+            case.items.append(ci)
+            new.append(ci)
+            case.step("match", t2, item=ci.item_id, reading=reading, method=method, confidence=ci.confidence,
+                      chosen=self.options_brand(ci))
+        return {"transcript": transcript, "items": [self.item_view(i) for i in new]}
+
+    def speech(self, case: Case) -> tuple[bytes, str, str]:
+        from app.ai.speech import findings_speech, speak_bn
+        result = self.check(case)
+        text = findings_speech(result["findings"])
+        t0 = time.time()
+        audio, mime, meta = speak_bn(text)
+        case.step("speak", t0, model=meta.get("model"), chars=len(text))
+        return audio, mime, text
+
     def confirm(self, case: Case, item_id: str, product_id: int | None, per_day: float | None = None) -> dict:
         it = next(i for i in case.items if i.item_id == item_id)
         it.product_id, it.needs_confirm, it.method = product_id, False, "user"
@@ -172,7 +237,7 @@ class Engine:
     # ---------- check ----------
     def check(self, case: Case) -> dict:
         t0 = time.time()
-        items = [Item(i.item_id, i.source if i.source != "text" else "strip", i.doc_id, i.product_id,
+        items = [Item(i.item_id, i.source, i.doc_id, i.product_id,
                       confirmed=not i.needs_confirm, handwritten=i.handwritten, per_day=i.per_day, doctor=i.doctor)
                  for i in case.items]
         meds, findings = self.rules.check(items)

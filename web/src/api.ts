@@ -65,6 +65,17 @@ export const api = {
     call<{ items: ItemView[] }>(`/api/cases/${cid}/text`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }),
   confirm: (cid: string, iid: string, product_id: number | null, per_day?: number | null) =>
     call<ItemView>(`/api/cases/${cid}/items/${iid}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id, per_day }) }),
+  addVoice: (cid: string, audio: Blob) => {
+    const fd = new FormData()
+    const ext = audio.type.includes('mp4') ? 'm4a' : 'webm'
+    fd.append('file', new File([audio], `voice.${ext}`, { type: audio.type.split(';')[0] }))
+    return call<{ transcript: string; items: ItemView[]; latency_ms: number }>(`/api/cases/${cid}/voice`, { method: 'POST', body: fd })
+  },
+  speech: async (cid: string): Promise<Blob> => {
+    const res = await fetch(`${API}/api/cases/${cid}/speech`, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
   check: (cid: string) => call<CheckResult>(`/api/cases/${cid}/check`),
   search: (q: string) => call<{ options: Option[]; path: Path | null; latency_ms: number; request_id: string }>(`/api/brands/search?q=${encodeURIComponent(q)}`),
   random: () => call<{ brand: string; path: Path; latency_ms: number; request_id: string }>('/api/brands/random'),

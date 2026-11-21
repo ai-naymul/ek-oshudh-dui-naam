@@ -53,8 +53,19 @@ def explain(f: Finding) -> dict:
         bn = f"{d['brand']} কোনো প্রেসক্রিপশনে নেই। ডাক্তার জানেন কি না নিশ্চিত হোন। {ASK}"
         en = f"{d['brand']} is not on any prescription. Make sure the doctor knows. {ASK_EN}"
     elif f.rule == "CONFIRM_FIRST":
-        bn = f"হাতের লেখা পুরো পরিষ্কার নয়: এটা কি {d['brand']}? ছবির সাথে মিলিয়ে নিশ্চিত করুন।"
-        en = f"The handwriting is unclear: is this {d['brand']}? Please confirm against the photo."
+        b, src = d["brand"], d.get("source")
+        if src == "voice":
+            bn = f"কথায় শোনা নামটি নিশ্চিত নয়: এটা কি {b}? তালিকা থেকে বেছে নিশ্চিত করুন।"
+            en = f"The spoken name is not certain: is this {b}? Please pick it from the list to confirm."
+        elif src == "text":
+            bn = f"লেখা নামটি তালিকার সাথে পুরো মেলেনি: এটা কি {b}? বেছে নিশ্চিত করুন।"
+            en = f"The typed name does not fully match the registry: is this {b}? Please confirm."
+        elif d.get("handwritten", True):
+            bn = f"হাতের লেখা পুরো পরিষ্কার নয়: এটা কি {b}? ছবির সাথে মিলিয়ে নিশ্চিত করুন।"
+            en = f"The handwriting is unclear: is this {b}? Please confirm against the photo."
+        else:
+            bn = f"ছবির লেখা পুরো পরিষ্কার নয়: এটা কি {b}? ছবির সাথে মিলিয়ে নিশ্চিত করুন।"
+            en = f"The text in the photo is unclear: is this {b}? Please confirm against the photo."
     else:
         bn = "এই ওষুধটি নিবন্ধিত তালিকায় পাওয়া যায়নি। স্ট্রিপ বা বাক্সের ছবি পাঠান।"
         en = "This medicine was not found in the registry. Please send a photo of the strip or box."
