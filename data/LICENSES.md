@@ -8,4 +8,4 @@
 | Image-to-Text Bilingual Dataset from Medical Prescriptions | full handwritten prescriptions (line-level evaluation) | check before use | https://data.mendeley.com/datasets/tg2hm7n2bs |
 | Online pharmacy product images | strip/box photos for the perception evaluation only (kept local, not redistributed) | publisher's terms; source URL recorded per image | `data/images_online/sources.csv` |
 
-Raw files live in `data/raw/` and other gitignored folders. Download with `scripts/get_data.sh` and `scripts/get_handwriting.sh`.
+Raw files live in `data/raw/` and other gitignored folders. Download with `scripts/get_data.sh` and `scripts/get_handwriting.py`.
