@@ -1,5 +1,8 @@
-import { motion, useReducedMotion } from 'motion/react'
-import { FileText, ScanSearch, MessageCircle } from 'lucide-react'
+import { useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { FileText, ScanSearch, MessageCircle, QrCode, X } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { shareUrl } from './api'
 
 const spring = { type: 'spring' as const, bounce: 0, duration: 0.6 }
 
@@ -36,11 +39,38 @@ export function MedicineGraph({ a = 'Napa', b = 'Ace', ingredient = 'Paracetamol
   )
 }
 
-export function Welcome({ onStart }: { onStart: () => void }) {
+function QrSheet({ onClose }: { onClose: () => void }) {
+  const url = shareUrl()
+  const local = /^(localhost|127\.|192\.168\.)/.test(window.location.hostname)
   return (
-    <motion.main className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 pb-10 pt-14"
+    <>
+      <motion.div className="fixed inset-0 z-40 bg-ink/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div role="dialog" aria-label="ফোনে খুলুন" className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-xl rounded-t-[28px] bg-white px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-4"
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}>
+        <div className="flex items-center justify-between">
+          <p className="text-lg font-bold">ফোনের ক্যামেরা দিয়ে স্ক্যান করুন</p>
+          <button onClick={onClose} aria-label="বন্ধ" className="grid h-9 w-9 place-items-center rounded-full bg-paper"><X size={18} /></button>
+        </div>
+        <div className="mt-4 flex justify-center"><QRCodeSVG value={url} size={232} marginSize={2} level="M" /></div>
+        <div className="mt-3 overflow-x-auto rounded-xl bg-paper px-3 py-2"><p className="whitespace-nowrap text-center font-sans text-[11px] text-muted">{url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</p></div>
+        <p className="mt-2 text-sm text-muted">{local ? 'এটি এই ল্যাপটপের লোকাল ঠিকানা; অন্য ফোনের জন্য পাবলিক লিংক থেকে খুলুন।' : 'কোনো অ্যাপ ইনস্টল লাগবে না, ব্রাউজারেই চলবে।'}</p>
+      </motion.div>
+    </>
+  )
+}
+
+export function Welcome({ onStart }: { onStart: () => void }) {
+  const [qr, setQr] = useState(false)
+  return (
+    <motion.main className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 pb-10 pt-6"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
-      <p className="text-sm font-semibold tracking-wide text-brand">এক ওষুধ, দুই নাম</p>
+      <div className="flex justify-end">
+        <motion.button whileTap={{ scale: 0.95 }} onClick={() => setQr(true)} className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-sm ring-1 ring-line">
+          <QrCode size={16} /> ফোনে খুলুন
+        </motion.button>
+      </div>
+      <AnimatePresence>{qr && <QrSheet onClose={() => setQr(false)} />}</AnimatePresence>
+      <p className="mt-4 text-sm font-semibold tracking-wide text-brand">এক ওষুধ, দুই নাম</p>
       <h1 className="display mt-2 text-[2.1rem] text-ink">একই ওষুধ, ভিন্ন নাম,<br />দ্বিগুণ ঝুঁকি।</h1>
       <p className="mt-3 text-muted">
         বাংলাদেশে শুধু প্যারাসিটামলেরই ১১৬টা ব্র্যান্ড নাম। দুই ডাক্তারের প্রেসক্রিপশনে দুই নামে একই ওষুধ থাকলে কেউ টেরও পায় না।

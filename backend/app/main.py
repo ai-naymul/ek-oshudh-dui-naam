@@ -1,4 +1,5 @@
 """FastAPI entry point: health, case API for the web app, and live catalog lookups."""
+import os
 import random
 import time
 import uuid
@@ -120,3 +121,11 @@ def brand_random():
     brand = random.choice(e.index.brands)
     p = e.graph.products_by_brand(brand)[0]
     return live({"brand": brand, "path": e.graph.path(p.id)}, t0)
+
+
+# The same server also serves the built web app (web/dist), so one tunnel URL is enough for a phone:
+# app and API on one origin. Cloudflare Pages serves the same build as the stable public front door.
+_DIST = os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")
+if os.path.isdir(_DIST):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=_DIST, html=True), name="web")

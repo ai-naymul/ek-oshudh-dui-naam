@@ -1,18 +1,32 @@
-// API client. The backend URL comes from ?api=... (the QR code carries the tunnel URL), then localStorage,
-// then the build-time VITE_API, then localhost. Every response is live (request id + latency), never cached.
+// API client. Backend URL: ?api=... (the QR carries the tunnel URL) > local backend on Vite ports > VITE_API >
+// last QR-given backend (Pages only) > same origin (backend serves the app). Every response is live, never cached.
 
 function resolveBase(): string {
+  const strip = (u: string) => u.replace(/\/$/, '')
   const fromQuery = new URLSearchParams(window.location.search).get('api')
-  try {
-    if (fromQuery) localStorage.setItem('api', fromQuery)
-    const saved = localStorage.getItem('api')
-    if (saved) return saved.replace(/\/$/, '')
-  } catch { /* private mode: fall through */ }
-  if (fromQuery) return fromQuery.replace(/\/$/, '')
-  return (import.meta.env.VITE_API as string | undefined)?.replace(/\/$/, '') || 'http://localhost:8000'
+  if (fromQuery) {
+    try { localStorage.setItem('api', fromQuery) } catch { /* private mode */ }
+    return strip(fromQuery)
+  }
+  // Vite dev/preview: the local backend on the same machine
+  if (['5173', '4173'].includes(window.location.port)) return `http://${window.location.hostname}:8000`
+  const fromEnv = import.meta.env.VITE_API as string | undefined
+  if (fromEnv) return strip(fromEnv)
+  // Cloudflare Pages has no API of its own: use the backend this phone was last given by a QR code
+  if (window.location.hostname.endsWith('.pages.dev')) {
+    try { const saved = localStorage.getItem('api'); if (saved) return strip(saved) } catch { /* ignore */ }
+  }
+  // Otherwise the backend is serving this page itself (one tunnel URL for app + API)
+  return window.location.origin
 }
 
 export const API = resolveBase()
+
+// Link for another phone: this page plus the backend it is talking to (the QR on the laptop screen encodes it).
+export const shareUrl = () => {
+  const page = `${window.location.origin}${window.location.pathname}`
+  return API === window.location.origin ? page : `${page}?api=${encodeURIComponent(API)}`
+}
 
 export type Option = { product_id: number; brand: string; strength: string; form: string; maker: string; generic: string; score: number }
 export type ItemView = {
