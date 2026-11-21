@@ -18,6 +18,8 @@ DEFAULTS = {
         "always_confirm": False,         # True = every reading waits for the family's tap, even exact names
     },
     "rules": dict(RULE_DEFAULTS),
+    # lines for the labelled sample case ("Rx:" = from a prescription); matches and findings are computed live
+    "sample_case": ["Rx: Napa 500 1+0+1", "Ace 500 0+0+1", "Seclo 20 0+0+1"],
 }
 
 

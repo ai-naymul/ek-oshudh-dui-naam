@@ -49,6 +49,22 @@ def live(payload: dict, t0: float) -> dict:
     return {**payload, "request_id": uuid.uuid4().hex[:12], "server_time": time.time(), "latency_ms": round((time.time() - t0) * 1000, 1)}
 
 
+@app.get("/api/health")
+def api_health():
+    """What the app can do right now: the local registry always; reading photos and voice only with the AI."""
+    from app.ai.gemini import STATUS
+    e = engine()
+    return {"registry": {"products": _registry_stats()["products"], "ready": True},
+            "ai": {"key_present": bool(os.environ.get("GEMINI_API_KEY")), **STATUS},
+            "aliases_skipped": e.index.alias_errors, "request_id": uuid.uuid4().hex[:12], "server_time": time.time()}
+
+
+@app.post("/api/cases/sample")
+def sample_case():
+    t0 = time.time()
+    return live(engine().sample_case(), t0)
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": APP_VERSION, "request_id": uuid.uuid4().hex[:12], "server_time": time.time()}
@@ -80,7 +96,7 @@ def _is_image(data: bytes) -> bool:
 
 # Plain (non-async) routes: FastAPI runs them in a worker thread, so a slow AI call never blocks other visitors.
 @app.post("/api/cases/{case_id}/images")
-def add_image(case_id: str, file: UploadFile = File(...)):
+def add_image(case_id: str, file: UploadFile = File(...), allow_repeat: bool = False):
     t0 = time.time()
     case = _case(case_id)
     data = file.file.read(MAX_UPLOAD + 1)
@@ -90,7 +106,7 @@ def add_image(case_id: str, file: UploadFile = File(...)):
         raise HTTPException(415, "this file is not a photo")
     from app.ai.gemini import GeminiError
     try:
-        return live(engine().add_image(case, data), t0)
+        return live(engine().add_image(case, data, allow_repeat=allow_repeat), t0)
     except GeminiError as e:
         raise HTTPException(502, f"reading failed: {e}")
 
@@ -170,6 +186,15 @@ def item_status(case_id: str, item_id: str, body: StatusIn):
     if not any(i.item_id == item_id for i in case.items):
         raise HTTPException(404, "item not found")
     return engine().set_status(case, item_id, body.taking)
+
+
+@app.delete("/api/cases/{case_id}/items/{item_id}")
+def remove_item(case_id: str, item_id: str):
+    case = _case(case_id)
+    if not any(i.item_id == item_id for i in case.items):
+        raise HTTPException(404, "item not found")
+    engine().remove(case, item_id)
+    return {"removed": item_id}
 
 
 @app.post("/api/cases/{case_id}/items/{item_id}/resolve")

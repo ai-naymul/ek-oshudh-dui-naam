@@ -82,7 +82,8 @@ class Decider:
     def rank_reading(self, index, reading: str, alternatives: list[str], products_per_brand: dict[str, int]):
         """-> (all candidates, [(best product of each brand, probability)] sorted high to low)."""
         cands, alt_sets = gather(index, reading, alternatives)
-        return cands, self.rank(features(reading, alternatives, cands, alt_sets, products_per_brand))
+        named = index.apply_alias(reading) if hasattr(index, "apply_alias") else reading
+        return cands, self.rank(features(named, alternatives, cands, alt_sets, products_per_brand))
 
     def rank(self, feats: list[tuple[Candidate, list[float]]]) -> list[tuple[Candidate, float]]:
         if not feats:

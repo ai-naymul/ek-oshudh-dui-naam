@@ -1,5 +1,5 @@
 {
-  "_about": "Switches you can change on-site; restart the server after editing. Only the keys written here override the defaults in backend/app/core/settings.py.",
+  "_about": "Switches you can change on-site; restart the server after editing. Only the keys written here override the defaults in backend/app/core/settings.py. sample_case: lines for the labelled sample ('Rx:' = from a prescription); its matches and findings are computed live.",
   "matching": {
     "auto_accept_threshold": null,
     "always_confirm": false
@@ -7,5 +7,10 @@
   "rules": {
     "dose_limits": false,
     "not_on_rx_finding": false
-  }
+  },
+  "sample_case": [
+    "Rx: Napa 500 1+0+1",
+    "Ace 500 0+0+1",
+    "Seclo 20 0+0+1"
+  ]
 }

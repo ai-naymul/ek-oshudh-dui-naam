@@ -34,15 +34,7 @@ def _engine():
 def check_medicines(lines: list[str]) -> dict:
     e = _engine()
     case = e.new_case()
-    rx = [l.split(":", 1)[1].strip() for l in lines if l.lower().startswith("rx:")]
-    bag = [l for l in lines if not l.lower().startswith("rx:")]
-    if bag:
-        e.add_text(case, "\n".join(bag))
-    for line in rx:
-        before = len(case.items)
-        e.add_text(case, line)
-        for it in case.items[before:]:
-            it.source, it.doc_id, it.doctor = "rx", "typed-rx", "typed prescription"
+    e.add_typed(case, lines)
     for it in case.items:   # the caller lists what the person takes now
         it.taking = "current"
     unsure = [{"line": i.reading, "best_guess": e.options_brand(i), "options": [o["brand"] for o in i.options]}

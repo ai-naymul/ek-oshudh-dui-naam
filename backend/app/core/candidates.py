@@ -84,7 +84,7 @@ class Candidate:
 
 
 class CandidateIndex:
-    def __init__(self, graph: Graph | None = None, bn_names_csv: str | None = None):
+    def __init__(self, graph: Graph | None = None, bn_names_csv: str | None = None, local_aliases_csv: str | None = None):
         self.g = graph or Graph()
         rows = self.g.con.execute("SELECT DISTINCT brand FROM product").fetchall()
         self.brands = [r[0] for r in rows]
@@ -99,6 +99,29 @@ class CandidateIndex:
                 for r in csv.DictReader(f):
                     if r.get("bangla") and r.get("brand"):
                         self.bn_alias[unicodedata.normalize("NFC", r["bangla"].strip())] = r["brand"].strip()
+        # Local spellings added on-site (data/curated/aliases_local.csv: alias,brand,note). A target that is not a real
+        # registry brand is skipped and reported, never trusted.
+        self.alias_errors: list[str] = []
+        local = local_aliases_csv or os.path.join(ROOT, "data", "curated", "aliases_local.csv")
+        known = set(self.brands)
+        if os.path.exists(local):
+            with open(local, encoding="utf-8") as f:
+                for r in csv.DictReader(f):
+                    alias, brand = (r.get("alias") or "").strip(), (r.get("brand") or "").strip()
+                    if not alias or not brand:
+                        continue
+                    if brand not in known:
+                        self.alias_errors.append(f"{alias} -> {brand}: not a registry brand")
+                        continue
+                    self.bn_alias[unicodedata.normalize("NFC", alias)] = brand
+        self._aliases_by_length = sorted(self.bn_alias, key=len, reverse=True)
+
+    def apply_alias(self, raw: str) -> str:
+        """Replace a known spelling at the start of the reading ('নাপা ৫০০ ১+০+১' -> 'Napa ৫০০ ১+০+১')."""
+        for alias in self._aliases_by_length:
+            if raw == alias or raw.startswith(alias + " "):
+                return self.bn_alias[alias] + raw[len(alias):]
+        return raw
 
     def top_brands(self, name: str, k: int = 30) -> list[tuple[str, float, bool]]:
         """Union of two retrievers: char n-gram TF-IDF cosine and edit-distance similarity (rapidfuzz), plus a phonetic bonus."""
@@ -121,8 +144,7 @@ class CandidateIndex:
 
     def search(self, reading: str, k: int = 20) -> list[Candidate]:
         raw = unicodedata.normalize("NFC", reading or "").strip()
-        alias = self.bn_alias.get(raw)
-        name, strength, form = parse_hints(alias or raw)
+        name, strength, form = parse_hints(self.apply_alias(raw))
         out: list[Candidate] = []
         for brand, sim, ph in self.top_brands(name, k=max(k, 30)):
             for p in self.g.products_by_brand(brand):

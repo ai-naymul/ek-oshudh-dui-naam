@@ -66,6 +66,7 @@ class Case:
     docs: list[dict] = field(default_factory=list)
     trace: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    sample: bool = False
     _next_item: int = 1
     _next_doc: int = 1
 
@@ -176,7 +177,7 @@ class Engine:
         top, p = ranked[0]
         if p >= self.policy["r2_accept"]:
             return top, round(p, 3), "R2", False, order
-        if exact_ok and brand_key(parse_hints(reading)[0]) == brand_key(top.brand):
+        if exact_ok and brand_key(parse_hints(self.index.apply_alias(reading))[0]) == brand_key(top.brand):
             return top, round(p, 3), "exact name", False, order
         third = self._safe_r3(crop_parts, [c for c, _ in ranked[:5]]) if crop_parts else None
         if third is not None:
@@ -191,11 +192,24 @@ class Engine:
         return top, round(p, 3), "R2 unsure", True, order
 
     # ---------- inputs ----------
-    def add_image(self, case: Case, data: bytes) -> dict:
+    @staticmethod
+    def _doc_signature(read: dict) -> tuple:
+        """Same doctor, same date and the same written names: the same prescription photographed again."""
+        norm = lambda s: " ".join((s or "").lower().split())
+        return (norm(read.get("doctor_text")), norm(read.get("date_text")),
+                tuple(sorted(norm(i.get("brand_text")) for i in read["items"])))
+
+    def add_image(self, case: Case, data: bytes, allow_repeat: bool = False) -> dict:
         from app.ai.gemini import image_part
         from app.ai.perceive import crop, read_image
         t0 = time.time()
         read = read_image(data)
+        sig = self._doc_signature(read)
+        if read["kind"] == "prescription" and not allow_repeat:
+            seen = next((d for d in case.docs if d.get("sig") == sig), None)
+            if seen:   # counted once: otherwise one prescription would look like two doctors prescribing the same thing
+                case.step("perceive", t0, kind=read["kind"], duplicate_of=seen["doc_id"])
+                return {"doc_id": None, "duplicate_of": seen["doc_id"], "kind": read["kind"], "items": []}
         ids, doc_id = case.new_ids(len(read["items"]), new_doc=True)
         source = "rx" if read["kind"] == "prescription" else "strip"
         steps = [("perceive", t0, dict(doc=doc_id, kind=read["kind"], lines=len(read["items"]), model=read["meta"].get("model")))]
@@ -216,8 +230,8 @@ class Engine:
                                              chosen=self.options_brand(ci))))
         # only now, when every line was read and matched, does the photo become part of the case (all or nothing)
         self._commit(case, new, steps, doc={"doc_id": doc_id, "kind": read["kind"], "doctor": read.get("doctor_text") or doc_id,
-                                            "date": read.get("date_text") or ""})
-        return {"doc_id": doc_id, "kind": read["kind"], "items": [self.item_view(i) for i in new]}
+                                            "date": read.get("date_text") or "", "sig": sig})
+        return {"doc_id": doc_id, "duplicate_of": None, "kind": read["kind"], "items": [self.item_view(i) for i in new]}
 
     @staticmethod
     def _commit(case: Case, new: list, steps: list, doc: dict | None = None) -> None:
@@ -283,6 +297,36 @@ class Engine:
         audio, mime, meta = speak_bn(text)
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
         return audio, mime, text
+
+    def remove(self, case: Case, item_id: str) -> None:
+        with case.lock:
+            it = next(i for i in case.items if i.item_id == item_id)
+            case.items.remove(it)
+        case.step("remove", time.time(), item=item_id)
+
+    def add_typed(self, case: Case, lines: list[str], rx_doctor: str = "typed prescription") -> dict:
+        """Typed lines; 'Rx: ...' lines count as a prescription (shared by the sample case and the MCP tool)."""
+        rx = [l.split(":", 1)[1].strip() for l in lines if l.lower().startswith("rx:")]
+        bag = [l for l in lines if l.strip() and not l.lower().startswith("rx:")]
+        new = []
+        if rx:
+            before = {i.item_id for i in case.items}
+            new += self.add_text(case, "\n".join(rx))["items"]
+            for it in case.items:
+                if it.item_id not in before:
+                    it.source, it.doc_id, it.doctor = "rx", "typed-rx", rx_doctor
+            new = [self.item_view(i) for i in case.items if i.item_id not in before]
+        if bag:
+            new += self.add_text(case, "\n".join(bag))["items"]
+        return {"items": new}
+
+    def sample_case(self) -> dict:
+        """A clearly labelled sample built at run time from the lines in config/settings.json ('sample_case'):
+        every match and finding is computed live, nothing stored."""
+        case = self.new_case()
+        case.sample = True
+        out = self.add_typed(case, list(self.settings.get("sample_case") or []), rx_doctor="নমুনা প্রেসক্রিপশন")
+        return {"case_id": case.case_id, "sample": True, "items": out["items"]}
 
     def set_status(self, case: Case, item_id: str, taking: str) -> dict:
         """The family says whether this medicine is taken now, stopped, or not known."""

@@ -39,6 +39,18 @@ class GeminiError(RuntimeError):
     pass
 
 
+# Last success / failure of any model call, for /api/health (the app tells the family when reading is offline).
+STATUS: dict = {"last_ok_at": None, "last_error_at": None, "last_error": None}
+
+
+def _mark(ok: bool, error: str = "") -> None:
+    now = time.time()
+    if ok:
+        STATUS["last_ok_at"] = now
+    else:
+        STATUS["last_error_at"], STATUS["last_error"] = now, error[:160]
+
+
 def image_part(path_or_bytes, mime: str | None = None) -> dict:
     if isinstance(path_or_bytes, (bytes, bytearray)):
         data, mime = bytes(path_or_bytes), mime or "image/jpeg"
@@ -68,6 +80,7 @@ def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse) 
             result = parse(resp["candidates"][0])
             meta = {"model": model, "seconds": round(time.time() - t0, 2),
                     "tokens": resp.get("usageMetadata", {}).get("totalTokenCount")}
+            _mark(True)
             return result, meta
         except urllib.error.HTTPError as e:
             last = f"HTTP {e.code}: {e.read().decode()[:200]}"
@@ -81,6 +94,7 @@ def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse) 
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
+    _mark(False, f"{model}: {last}")
     raise GeminiError(f"{model} failed: {last}")
 
 
@@ -117,6 +131,7 @@ def chat(contents: list, tools: list, model: str = LITE_MODEL, retries: int = 2,
             with _SEM:
                 resp = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
             content = resp["candidates"][0]["content"]
+            _mark(True)
             return content, {"model": model, "seconds": round(time.time() - t0, 2),
                              "tokens": resp.get("usageMetadata", {}).get("totalTokenCount")}
         except urllib.error.HTTPError as e:
@@ -131,6 +146,7 @@ def chat(contents: list, tools: list, model: str = LITE_MODEL, retries: int = 2,
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
+    _mark(False, f"{model}: {last}")
     raise GeminiError(f"{model} failed: {last}")
 
 
