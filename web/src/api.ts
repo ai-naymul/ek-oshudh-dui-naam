@@ -56,6 +56,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   newCase: () => call<{ case_id: string }>('/api/cases', { method: 'POST' }),
+  getCase: (cid: string) => call<{ case_id: string; items: ItemView[] }>(`/api/cases/${encodeURIComponent(cid)}`),
   addImage: (cid: string, file: Blob) => {
     const fd = new FormData()
     fd.append('file', file, 'photo.jpg')

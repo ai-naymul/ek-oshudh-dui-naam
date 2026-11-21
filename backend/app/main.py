@@ -1,13 +1,14 @@
 """FastAPI entry point: health, case API for the web app, and live catalog lookups."""
+import json
 import os
 import random
 import time
 import uuid
 from functools import lru_cache
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 
 APP_VERSION = "0.2.0"
@@ -154,6 +155,48 @@ def brand_random():
     p = e.graph.products_by_brand(brand)[0]
     return live({"brand": brand, "path": e.graph.path(p.id)}, t0)
 
+
+
+@app.get("/api/cases/{case_id}")
+def get_case(case_id: str):
+    """Reopen a case (e.g. from the WhatsApp link): its items, so the web app can show confirm or results."""
+    t0 = time.time()
+    case = _case(case_id)
+    return live({"case_id": case.case_id, "items": [engine().item_view(i) for i in case.items]}, t0)
+
+
+# ---------- WhatsApp (Meta Cloud API test number) ----------
+@lru_cache(maxsize=1)
+def whatsapp():
+    from app.channels.whatsapp import WhatsApp
+    return WhatsApp(engine())
+
+
+@app.get("/whatsapp/webhook")
+def wa_verify(request: Request):
+    q = request.query_params
+    challenge = whatsapp().verify(q.get("hub.mode"), q.get("hub.verify_token"), q.get("hub.challenge"))
+    if challenge is None:
+        raise HTTPException(403, "verification failed")
+    return PlainTextResponse(challenge)
+
+
+@app.post("/whatsapp/webhook")
+async def wa_receive(request: Request, background: BackgroundTasks):
+    body = await request.body()
+    wa = whatsapp()
+    if not wa.signature_ok(body, request.headers.get("x-hub-signature-256")):
+        raise HTTPException(401, "bad signature")
+    if not os.environ.get("PUBLIC_API_URL"):
+        wa.public_url = str(request.base_url)      # the tunnel URL this request came through
+    try:
+        payload = json.loads(body or b"{}")
+    except ValueError:
+        raise HTTPException(400, "bad json")
+    for msg in wa.messages(payload):
+        if msg.get("id") and wa.first_time(msg["id"]):
+            background.add_task(wa.handle, msg)      # answer Meta at once; work after the response
+    return {"ok": True}
 
 # The same server also serves the built web app (web/dist), so one tunnel URL is enough for a phone:
 # app and API on one origin. Cloudflare Pages serves the same build as the stable public front door.
