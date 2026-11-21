@@ -1,94 +1,83 @@
-import { useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { FileText, ScanSearch, MessageCircle, QrCode, X } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
-import { shareUrl } from './api'
+import { useEffect, useState } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { Camera, ScanSearch, MessageCircle, ShieldCheck } from 'lucide-react'
+import { bn, bnInt, bnPct, type Stats } from './api'
+import { SameMedicine, spring } from './Shell'
 
-const spring = { type: 'spring' as const, bounce: 0, duration: 0.6 }
-
-// The idea in one picture: two different brands lead to the same ingredient.
-export function MedicineGraph({ a = 'Napa', b = 'Ace', ingredient = 'Paracetamol' }: { a?: string; b?: string; ingredient?: string }) {
+// Every number here comes from /api/stats (the registry and models/policy.json), never typed in.
+export function Welcome({ stats, onStart, starting }: { stats: Stats | null; onStart: () => void; starting: boolean }) {
   const reduce = useReducedMotion()
-  const draw = (delay: number) => (reduce ? { initial: false } : {
-    initial: { pathLength: 0, opacity: 0 }, animate: { pathLength: 1, opacity: 1 }, transition: { duration: 0.7, delay, ease: 'easeOut' as const },
-  })
-  const pop = (delay: number) => (reduce ? { initial: false } : {
-    initial: { opacity: 0, scale: 0.9, y: 6 }, animate: { opacity: 1, scale: 1, y: 0 }, transition: { ...spring, delay },
-  })
-  return (
-    <svg viewBox="0 0 340 170" className="w-full max-w-[380px]" role="img" aria-label={`${a} আর ${b} দুটোতেই ${ingredient}`}>
-      <motion.path d="M96 40 C150 40 150 85 196 85" stroke="#c8382a" strokeWidth="2.5" fill="none" {...draw(0.5)} />
-      <motion.path d="M96 130 C150 130 150 85 196 85" stroke="#c8382a" strokeWidth="2.5" fill="none" {...draw(0.7)} />
-      <motion.g {...pop(0.1)}>
-        <rect x="8" y="22" width="88" height="36" rx="12" fill="#fdeeec" stroke="#c8382a" />
-        <text x="52" y="45" textAnchor="middle" fontSize="15" fontWeight="700" fill="#c8382a" fontFamily="Inter Variable">{a}</text>
-      </motion.g>
-      <motion.g {...pop(0.25)}>
-        <rect x="8" y="112" width="88" height="36" rx="12" fill="#fdeeec" stroke="#c8382a" />
-        <text x="52" y="135" textAnchor="middle" fontSize="15" fontWeight="700" fill="#c8382a" fontFamily="Inter Variable">{b}</text>
-      </motion.g>
-      <motion.g {...pop(1.0)}>
-        <rect x="196" y="66" width="136" height="38" rx="12" fill="#fff" stroke="#14201c" strokeWidth="1.5" />
-        <text x="264" y="90" textAnchor="middle" fontSize="15" fontWeight="700" fill="#14201c" fontFamily="Inter Variable">{ingredient}</text>
-      </motion.g>
-      <motion.g {...pop(1.3)}>
-        <rect x="206" y="118" width="116" height="26" rx="13" fill="#c8382a" />
-        <text x="264" y="136" textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">একই ওষুধ!</text>
-      </motion.g>
-    </svg>
-  )
-}
+  const examples = stats?.examples.filter((e) => e.brands.length >= 2) ?? []
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    if (examples.length < 2 || reduce) return
+    const t = window.setInterval(() => setI((x) => (x + 1) % examples.length), 5200)
+    return () => window.clearInterval(t)
+  }, [examples.length, reduce])
+  const ex = examples.length ? examples[i % examples.length] : null
+  const para = stats?.examples.find((e) => e.ingredient === 'Paracetamol')
+  const lead = para ?? stats?.examples[0]
 
-function QrSheet({ onClose }: { onClose: () => void }) {
-  const url = shareUrl()
-  const local = /^(localhost|127\.|192\.168\.)/.test(window.location.hostname)
   return (
-    <>
-      <motion.div className="fixed inset-0 z-40 bg-ink/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-      <motion.div role="dialog" aria-label="ফোনে খুলুন" className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-xl rounded-t-[28px] bg-white px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-4"
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}>
-        <div className="flex items-center justify-between">
-          <p className="text-lg font-bold">ফোনের ক্যামেরা দিয়ে স্ক্যান করুন</p>
-          <button onClick={onClose} aria-label="বন্ধ" className="grid h-9 w-9 place-items-center rounded-full bg-paper"><X size={18} /></button>
-        </div>
-        <div className="mt-4 flex justify-center"><QRCodeSVG value={url} size={232} marginSize={2} level="M" /></div>
-        <div className="mt-3 overflow-x-auto rounded-xl bg-paper px-3 py-2"><p className="whitespace-nowrap text-center font-sans text-[11px] text-muted">{url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</p></div>
-        <p className="mt-2 text-sm text-muted">{local ? 'এটি এই ল্যাপটপের লোকাল ঠিকানা; অন্য ফোনের জন্য পাবলিক লিংক থেকে খুলুন।' : 'কোনো অ্যাপ ইনস্টল লাগবে না, ব্রাউজারেই চলবে।'}</p>
-      </motion.div>
-    </>
-  )
-}
-
-export function Welcome({ onStart }: { onStart: () => void }) {
-  const [qr, setQr] = useState(false)
-  return (
-    <motion.main className="mx-auto flex min-h-dvh max-w-xl flex-col px-5 pb-10 pt-6"
+    <motion.main className="mx-auto grid max-w-6xl gap-10 px-5 pb-12 pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:gap-16 lg:px-8 lg:pt-16"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
-      <div className="flex justify-end">
-        <motion.button whileTap={{ scale: 0.95 }} onClick={() => setQr(true)} className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-sm ring-1 ring-line">
-          <QrCode size={16} /> ফোনে খুলুন
+      <section>
+        <h1 className="display text-[2.4rem] text-ink sm:text-[3.2rem] lg:text-[3.6rem]">একই ওষুধ, ভিন্ন নাম,<br />দ্বিগুণ ঝুঁকি।</h1>
+        <p className="mt-5 max-w-[34rem] text-[19px] text-muted">
+          {lead
+            ? <>বাংলাদেশে শুধু <span className="print font-semibold text-ink">{lead.ingredient}</span> বিক্রি হয় {bnInt(lead.brand_count)}টি আলাদা নামে। দুই ডাক্তার দুই নামে একই ওষুধ লিখলে বাড়িতে কেউ টেরও পায় না।</>
+            : 'দুই ডাক্তার দুই নামে একই ওষুধ লিখলে বাড়িতে কেউ টেরও পায় না।'}
+        </p>
+        <motion.button whileTap={{ scale: 0.97 }} transition={{ duration: 0.1 }} onClick={onStart} disabled={starting}
+          className="mt-8 w-full rounded-2xl bg-rx py-4 text-[20px] font-semibold text-white shadow-[0_10px_30px_-10px_rgba(11,93,75,0.6)] disabled:opacity-60 sm:w-auto sm:px-12">
+          মিলিয়ে দেখা শুরু করুন
         </motion.button>
-      </div>
-      <AnimatePresence>{qr && <QrSheet onClose={() => setQr(false)} />}</AnimatePresence>
-      <p className="mt-4 text-sm font-semibold tracking-wide text-brand">এক ওষুধ, দুই নাম</p>
-      <h1 className="display mt-2 text-[2.1rem] text-ink">একই ওষুধ, ভিন্ন নাম,<br />দ্বিগুণ ঝুঁকি।</h1>
-      <p className="mt-3 text-muted">
-        বাংলাদেশে শুধু প্যারাসিটামলেরই ১১৬টা ব্র্যান্ড নাম। দুই ডাক্তারের প্রেসক্রিপশনে দুই নামে একই ওষুধ থাকলে কেউ টেরও পায় না।
-      </p>
-      <div className="card mt-6 flex justify-center px-3 py-5"><MedicineGraph /></div>
-      <ul className="mt-6 space-y-3 text-[17px]">
-        {[[<FileText key="a" size={18} />, 'প্রেসক্রিপশন বা ওষুধের স্ট্রিপের ছবি দিন'],
-          [<ScanSearch key="b" size={18} />, 'নিবন্ধিত ২১,৩৬৩টি ওষুধের সাথে মিলিয়ে দেখা হবে'],
-          [<MessageCircle key="c" size={18} />, 'বাংলায় সহজ উত্তর, প্রতিটির উৎসসহ']].map(([icon, text], i) => (
-          <li key={i} className="flex items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>{text}
-          </li>))}
-      </ul>
-      <motion.button whileTap={{ scale: 0.97 }} transition={{ duration: 0.1 }} onClick={onStart}
-        className="mt-auto w-full rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-lg shadow-brand/20">
-        শুরু করুন
-      </motion.button>
-      <p className="mt-3 text-center text-xs text-muted">এটি ডাক্তারের পরামর্শের বিকল্প নয়। প্রতিটি সতর্কবার্তা ডাক্তার বা ফার্মাসিস্টকে দেখান।</p>
+
+        <ol className="mt-10 space-y-4">
+          {[
+            [<Camera key="c" size={20} />, 'প্রেসক্রিপশন বা ওষুধের স্ট্রিপের ছবি দিন, নাম বলুন বা লিখুন'],
+            [<ScanSearch key="s" size={20} />, stats ? `প্রতিটি নাম মেলানো হয় নিবন্ধিত ${bnInt(stats.products)}টি ওষুধের তালিকার সাথে` : 'প্রতিটি নাম মেলানো হয় নিবন্ধিত ওষুধের তালিকার সাথে'],
+            [<MessageCircle key="m" size={20} />, 'ফল আসে বাংলায়: লেখা, কণ্ঠ আর একটি ছবি কার্ড'],
+          ].map(([icon, text], k) => (
+            <li key={k} className="flex items-center gap-4">
+              <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-rx-soft text-rx">
+                {icon}
+                <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-rx text-[12px] font-semibold text-white">{bn(k + 1)}</span>
+              </span>
+              <span className="text-[18px]">{text}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-8 max-w-[34rem] text-[15px] text-muted">এটি ডাক্তারের পরামর্শের বিকল্প নয়। প্রতিটি সতর্কবার্তা ডাক্তার বা ফার্মাসিস্টকে দেখান।</p>
+      </section>
+
+      <section aria-label="উদাহরণ" className="sheet lift relative overflow-hidden px-5 py-7 sm:px-8 lg:py-10">
+        <div className="relative">
+          <p className="print text-[15px] font-semibold text-rx">℞ দুই প্রেসক্রিপশন, দুই নাম</p>
+          {/* faint pad rule lines only where the names are written */}
+          <div className="mt-4 min-h-[150px] rounded-xl bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_37px,rgba(36,64,142,0.08)_37px,rgba(36,64,142,0.08)_38px)] py-3">
+            {ex ? <SameMedicine key={ex.ingredient} a={ex.brands[0]} b={ex.brands[1]} ingredient={ex.ingredient} ink caption="একই ওষুধ" />
+              : <div className="h-[150px] animate-pulse rounded-2xl bg-paper" />}
+          </div>
+          <div className="mt-6 border-t border-foil pt-4">
+            {ex && <p className="text-[16px] text-muted">নিবন্ধিত তালিকায় <span className="print font-semibold text-ink">{ex.ingredient}</span> আছে {bnInt(ex.brand_count)}টি ব্র্যান্ড নামে, যেমন <span className="print text-ink">{ex.brands.slice(2, 5).join(', ')}</span>।</p>}
+            {examples.length > 1 && (
+              <div className="mt-4 flex gap-1.5" role="tablist" aria-label="উদাহরণ বদলান">
+                {examples.map((e, k) => (
+                  <button key={e.ingredient} role="tab" aria-selected={k === i % examples.length} aria-label={e.ingredient} onClick={() => setI(k)}
+                    className={`h-2 rounded-full transition-all ${k === i % examples.length ? 'w-6 bg-rx' : 'w-2 bg-foil'}`} />
+                ))}
+              </div>
+            )}
+          </div>
+          {stats?.eval && (
+            <p className="mt-5 flex items-start gap-2 rounded-xl bg-rx-soft px-3 py-2.5 text-[15px] text-rx-deep">
+              <ShieldCheck size={18} className="mt-0.5 shrink-0" />
+              <span>বাংলাদেশি ডাক্তারদের হাতে লেখা {bnInt(stats.eval.n_test)}টি ওষুধের নামে পরীক্ষা: সঠিক মিল {bnPct(stats.eval.top1)}। নিশ্চিত না হলে অ্যাপ নিজে না ধরে আপনাকে জিজ্ঞেস করে।</span>
+            </p>
+          )}
+        </div>
+      </section>
     </motion.main>
   )
 }

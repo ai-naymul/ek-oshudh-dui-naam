@@ -296,4 +296,4 @@ class Engine:
                 "alternatives": it.alternatives, "handwritten": it.handwritten, "agree": it.agree, "chosen": chosen,
                 "confidence": it.confidence, "method": it.method, "needs_confirm": it.needs_confirm,
                 "options": it.options, "schedule": it.schedule, "per_day": it.per_day, "has_crop": it.crop is not None,
-                "agent": it.agent}
+                "agent": it.agent, "doctor": it.doctor}

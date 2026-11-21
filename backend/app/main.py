@@ -26,6 +26,13 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def _warm() -> None:
+    """Load the registry, search index and decision model before the first visitor, not during it."""
+    engine()
+    _registry_stats()
+
+
 @lru_cache(maxsize=1)
 def engine():
     from app.conversation import Engine
@@ -156,6 +163,42 @@ def brand_search(q: str):
     cands = e.index.search(q, 20)
     opts = e._options(cands, 5)
     return live({"query": q, "options": opts, "path": e.graph.path(opts[0]["product_id"]) if opts else None}, t0)
+
+
+@lru_cache(maxsize=1)
+def _registry_stats() -> dict:
+    """Computed once from the registry: sizes, and the medicines sold under the most brand names (single-ingredient
+    products only, salts folded: 'Cefixime Trihydrate' -> Cefixime). Used by the welcome screen: nothing typed by hand."""
+    from app.core.rules import base_ingredient
+    g = engine().graph
+    q = g._q
+    counts = {"products": q("SELECT COUNT(*) FROM product")[0][0], "brand_names": q("SELECT COUNT(DISTINCT brand) FROM product")[0][0],
+              "generics": q("SELECT COUNT(DISTINCT generic) FROM product")[0][0]}
+    rows = q("""SELECT i.name, p.brand, COUNT(*) FROM product p
+                JOIN product_ingredient pi ON pi.product_id = p.id JOIN ingredient i ON i.id = pi.ingredient_id
+                WHERE p.id IN (SELECT product_id FROM product_ingredient GROUP BY product_id HAVING COUNT(*) = 1)
+                GROUP BY i.name, p.brand""")
+    by: dict[str, dict[str, int]] = {}
+    for name, brand, n in rows:
+        d = by.setdefault(base_ingredient(name).title(), {})
+        d[brand] = d.get(brand, 0) + n
+    top = sorted(by.items(), key=lambda kv: -len(kv[1]))[:8]
+    examples = [{"ingredient": ing, "brand_count": len(brands),
+                 "brands": [b for b, _ in sorted(brands.items(), key=lambda kv: (-kv[1], kv[0]))[:8]]} for ing, brands in top]
+    return {**counts, "examples": examples}
+
+
+@app.get("/api/stats")
+def stats():
+    t0 = time.time()
+    pol = engine().policy
+    ev = None
+    if pol.get("test"):
+        ev = {"n_test": pol.get("n_test"), "reader": pol.get("reader"), "method": pol.get("method"),
+              "top1": (pol.get("top1_test_audited") or pol.get("top1_test") or {}).get("R2"),
+              "auto_accept": pol["test"].get("auto_accept_coverage"),
+              "auto_error_audited": (pol.get("test_audited") or {}).get("auto_accept_error")}
+    return live({**_registry_stats(), "eval": ev}, t0)
 
 
 @app.get("/api/brands/random")

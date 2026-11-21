@@ -79,3 +79,11 @@ def test_expired_case_is_gone(client):
     cid = client.post("/api/cases").json()["case_id"]
     engine().cases[cid].created -= conv.TTL_SECONDS + 1
     assert client.get(f"/api/cases/{cid}").status_code == 404 and cid not in engine().cases
+
+
+def test_stats_are_computed_from_the_registry(client):
+    s = client.get("/api/stats").json()
+    assert s["products"] == 21363 and s["brand_names"] == 13627
+    para = next(e for e in s["examples"] if e["ingredient"] == "Paracetamol")
+    assert para["brand_count"] > 100 and "Napa" in para["brands"] and len(para["brands"]) <= 8
+    assert s["examples"] == sorted(s["examples"], key=lambda e: -e["brand_count"])

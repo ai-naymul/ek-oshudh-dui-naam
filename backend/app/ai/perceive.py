@@ -26,7 +26,7 @@ For each medicine line give:
 - schedule_text exactly as written (e.g. 1+0+1, ১+০+১, BD, সকালে ১টা), meal_text (before/after food), duration_text
 - expiry_text if printed (strips/boxes)
 - handwritten: true if this line is handwritten
-- box: [ymin, xmin, ymax, xmax] of the medicine name on the image, scaled 0-1000
+- box: [ymin, xmin, ymax, xmax] around the WHOLE written line or label for this medicine (number, form, name, strength and schedule), scaled 0-1000
 Also give kind and, for prescriptions, doctor_text (doctor or clinic name only) and date_text."""
 
 SCHEMA = {
@@ -56,15 +56,18 @@ def _resize(data: bytes, max_side: int = 1600) -> tuple[bytes, tuple[int, int]]:
     return buf.getvalue(), img.size
 
 
-def crop(data: bytes, box: list[int] | None, pad: float = 0.04, pad_x: float = 0.09) -> bytes | None:
-    """Cut the region of one line (box on the 0-1000 scale) for the confirm screen and the R3 reranker."""
+def crop(data: bytes, box: list[int] | None, pad: float = 0.03, pad_x: float = 0.06) -> bytes | None:
+    """Cut the region of one line (box on the 0-1000 scale) for the confirm screen and the R3 reranker.
+    The box covers the whole line; a margin (growing with the box, never less than pad/pad_x) keeps the first and
+    last letters in view: the person confirming must see the whole written line, not a clipped word."""
     if not box or len(box) != 4:
         return None
     img = Image.open(io.BytesIO(data)).convert("RGB")
     w, h = img.size
     y0, x0, y1, x1 = [v / 1000 for v in box]
-    x0, x1 = max(0, x0 - pad_x), min(1, x1 + pad_x)
-    y0, y1 = max(0, y0 - pad), min(1, y1 + pad)
+    px, py = max(pad_x, 0.06 * (x1 - x0)), max(pad, 0.35 * (y1 - y0))
+    x0, x1 = max(0, x0 - px), min(1, x1 + px)
+    y0, y1 = max(0, y0 - py), min(1, y1 + py)
     if x1 <= x0 or y1 <= y0:
         return None
     buf = io.BytesIO()

@@ -31,12 +31,18 @@ export type ItemView = {
   schedule: { morning: number | null; noon: number | null; night: number | null; per_day: number | null; meal: string | null; days: number | null }
   per_day: number | null; has_crop: boolean
   agent: { product_id: number | null; brand: string | null; reason_bn: string; tools: string[] } | null
+  doctor: string | null
 }
 export type Finding = { rule: string; severity: 'red' | 'amber' | 'info'; title_bn: string; title_en: string; bn: string; en: string; source: string; meds: string[] }
 export type Path = { brand: string; strength: string; form: string; maker: string; ingredients: { name: string; strength: string; class: string | null }[] }
 export type Medicine = {
   med_id: string; brand: string; strength: string; form: string; path: Path; per_day: number | null; from_rx: boolean
   doctors: string[]; monthly_cost: number | null; cheaper: { brand: string; maker: string; unit_price: number }[]; items: string[]
+}
+export type Stats = {
+  products: number; brand_names: number; generics: number
+  examples: { ingredient: string; brand_count: number; brands: string[] }[]
+  eval: { n_test: number; reader: string; method: string; top1: number; auto_accept: number; auto_error_audited: number | null } | null
 }
 export type TraceStep = { step: string; ms: number; [k: string]: unknown }
 export type CheckResult = { case_id: string; medicines: Medicine[]; findings: Finding[]; trace: TraceStep[]; policy: Record<string, unknown>; request_id: string; latency_ms: number }
@@ -51,6 +57,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  stats: () => call<Stats>('/api/stats'),
   newCase: () => call<{ case_id: string }>('/api/cases', { method: 'POST' }),
   getCase: (cid: string) => call<{ case_id: string; items: ItemView[] }>(`/api/cases/${encodeURIComponent(cid)}`),
   addImage: (cid: string, file: Blob) => {
@@ -92,3 +99,5 @@ export async function shrink(file: File, max = 1600): Promise<Blob> {
 }
 
 export const bn = (n: number | string) => String(n).replace(/[0-9]/g, (d) => '০১২৩৪৫৬৭৮৯'[Number(d)])
+export const bnInt = (n: number) => bn(n.toLocaleString('en-IN'))
+export const bnPct = (x: number) => `${bn((x * 100).toFixed(1).replace(/\.0$/, ''))}%`

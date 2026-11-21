@@ -1,22 +1,36 @@
 @import "tailwindcss";
 @import "@fontsource/hind-siliguri/400.css";
+@import "@fontsource/hind-siliguri/500.css";
 @import "@fontsource/hind-siliguri/600.css";
 @import "@fontsource/hind-siliguri/700.css";
+@import "@fontsource-variable/anek-bangla";
 @import "@fontsource-variable/inter";
+@import "@fontsource/kalam/400.css";
+@import "@fontsource/kalam/700.css";
 
+/* Two materials from the subject's world: the doctor's pad written in blue ink, and the printed foil strip.
+   Handwritten readings are set in ink (Kalam, pen blue); what we matched in the registry is set in print (Anek). */
 @theme {
-  --color-brand: #0e6b5c;
-  --color-brand-soft: #e7f3ef;
+  --color-rx: #0b5d4b;          /* Rx-pad green: the brand and every primary action */
+  --color-rx-deep: #08463a;
+  --color-rx-soft: #e3f0eb;
+  --color-pen: #24408e;         /* doctor's ink: only for what was read from handwriting or speech */
+  --color-paper: #f6f8f7;
+  --color-foil: #dce3e0;        /* hairlines and quiet fills */
+  --color-ink: #17251f;
+  --color-muted: #5b6a65;
   --color-danger: #c8382a;
-  --color-danger-soft: #fdeeec;
-  --color-warn: #b8730c;
-  --color-warn-soft: #fdf4e3;
-  --color-ink: #14201c;
-  --color-muted: #5d6b66;
-  --color-line: #e3e8e5;
-  --color-paper: #f5f7f4;
-  --font-sans: "Inter Variable", "Hind Siliguri", system-ui, sans-serif;
-  --font-bn: "Hind Siliguri", "Inter Variable", system-ui, sans-serif;
+  --color-danger-soft: #fcedeb;
+  --color-warn: #a86200;
+  --color-warn-soft: #fbf1e1;
+  /* aliases kept for older class names */
+  --color-brand: #0b5d4b;
+  --color-brand-soft: #e3f0eb;
+  --color-line: #dce3e0;
+  --font-sans: "Hind Siliguri", "Inter Variable", system-ui, sans-serif;
+  --font-display: "Anek Bangla Variable", "Hind Siliguri", system-ui, sans-serif;
+  --font-print: "Anek Bangla Variable", "Inter Variable", system-ui, sans-serif;
+  --font-hand: "Kalam", "Hind Siliguri", cursive;
 }
 
 html, body, #root { min-height: 100%; }
@@ -24,31 +38,28 @@ body {
   margin: 0;
   background: var(--color-paper);
   color: var(--color-ink);
-  font-family: var(--font-bn);
+  font-family: var(--font-sans);
   font-size: 18px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
-/* Display type: tight tracking and leading as it grows (Apple typography) */
-.display { font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; }
+/* Display type tightens as it grows (Apple typography); Anek's width axis gives it a printed-label feel */
+.display { font-family: var(--font-display); font-weight: 680; font-stretch: 92%; line-height: 1.08; letter-spacing: -0.015em; }
+.print { font-family: var(--font-print); font-stretch: 96%; }
+.hand { font-family: var(--font-hand); color: var(--color-pen); letter-spacing: 0.01em; }
 
-/* Translucent chrome: content scrolls underneath */
-.glass {
-  background: rgba(245, 247, 244, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
+/* Translucent chrome over scrolling content; the heavier one carries actions */
+.glass { background: rgba(246, 248, 247, 0.78); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
+.glass-strong { background: rgba(246, 248, 247, 0.93); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); }
 
-/* Heavier material for the action bar: content scrolls under it but never competes with its text */
-.glass-strong {
-  background: rgba(245, 247, 244, 0.92);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-}
+/* Surfaces: one sheet style for grouped lists; panels get no shadow, only the sheet that floats gets depth */
+.sheet { background: #fff; border-radius: 20px; box-shadow: 0 0 0 1px var(--color-foil); }
+.card { background: #fff; border-radius: 20px; box-shadow: 0 0 0 1px var(--color-foil); }
+.lift { box-shadow: 0 0 0 1px var(--color-foil), 0 12px 32px -12px rgba(11, 93, 75, 0.18); }
 
-.card { background: #fff; border: 1px solid var(--color-line); border-radius: 22px; box-shadow: 0 1px 2px rgba(20,32,28,.04), 0 8px 24px rgba(20,32,28,.05); }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-rx) 55%, transparent); outline-offset: 2px; border-radius: 12px; }
 
 @media (prefers-reduced-transparency: reduce) {
   .glass, .glass-strong { background: var(--color-paper); backdrop-filter: none; -webkit-backdrop-filter: none; }

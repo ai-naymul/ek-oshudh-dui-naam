@@ -102,7 +102,7 @@ export function summaryText(r: CheckResult): string {
     'এটি ডাক্তারের পরামর্শের বিকল্প নয়। ডাক্তার বা ফার্মাসিস্টকে দেখান।'].join('\n')
 }
 
-// Share the PNG through the phone's share sheet (WhatsApp appears there); fall back to download + wa.me text link.
+// Share the PNG through the phone's share sheet (WhatsApp, Messenger etc. appear there); on a laptop, download it.
 export async function shareCard(r: CheckResult): Promise<'shared' | 'downloaded'> {
   const blob = await drawCard(r)
   const file = new File([blob], 'ek-oshudh-card.png', { type: 'image/png' })
@@ -117,6 +117,5 @@ export async function shareCard(r: CheckResult): Promise<'shared' | 'downloaded'
   a.href = URL.createObjectURL(blob)
   a.download = 'ek-oshudh-card.png'
   a.click()
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
   return 'downloaded'
 }
