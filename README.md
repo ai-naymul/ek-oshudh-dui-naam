@@ -12,17 +12,17 @@ or pharmacist.
 
 Team **Agentic Bekar** · CoU AI Hackathon 2026 finals.
 
-## Run it locally (3 commands)
+## Run it locally
 
 ```bash
-bash scripts/get_data.sh                                      # registry CSVs (public, MIT)
-cd backend && uv sync && uv run python -m app.core.graph      # build the knowledge graph (21,363 products)
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000        # API + the web app at http://localhost:8000
+bash scripts/get_data.sh                                          # registry CSVs (public, MIT)
+(cd web && npm ci && npm run build)                               # the web app, built into web/dist
+cd backend && uv sync && uv run python -m app.core.graph          # build the knowledge graph (21,363 products)
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000            # API + the web app at http://localhost:8000
 ```
 
 Reading photos and voice needs a Gemini key in `.env` (`GEMINI_API_KEY=...`, see `.env.example`). Without it the app
 says so, and typed names, the sample case, matching and every rule still work offline.
-The web app is pre-built in `web/dist`; to rebuild: `cd web && npm ci && npm run build`.
 
 Try it: **নমুনা দেখুন** (a labelled sample computed live) → **মিলিয়ে দেখুন** → answer **এখন খাচ্ছেন?** for both →
 the two names join at the one ingredient. Press **ফোনে খুলুন** for a QR code that opens the app on a phone on the
