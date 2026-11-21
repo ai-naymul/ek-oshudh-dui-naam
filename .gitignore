@@ -22,6 +22,7 @@ data/images_online/
 data/images_home/
 data/prescriptions/
 models/*.txt
+!models/decider.txt
 models/*.bin
 eval/results/
 training/out/

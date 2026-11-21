@@ -64,3 +64,10 @@ def test_brand_search_and_random_are_live(client):
 
 def test_unknown_case_is_404(client):
     assert client.get("/api/cases/nope/check").status_code == 404
+
+
+def test_exact_typed_name_is_accepted_but_typo_asks(client):
+    cid = client.post("/api/cases").json()["case_id"]
+    items = client.post(f"/api/cases/{cid}/text", json={"text": "Seclo 20\nSeclloo 20"}).json()["items"]
+    assert items[0]["chosen"]["brand"] == "Seclo" and not items[0]["needs_confirm"]
+    assert items[1]["needs_confirm"] and items[1]["options"][0]["brand"] == "Seclo"

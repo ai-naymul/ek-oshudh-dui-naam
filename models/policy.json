@@ -1,0 +1,91 @@
+{
+ "method": "R2",
+ "reader": "gemini-3.8-flash",
+ "r2_accept": 0.98,
+ "agree_min": null,
+ "max_auto_error": 0.02,
+ "threshold_rule": "95% upper bound of validation error <= max_auto_error",
+ "chosen_on": "validation split (most items auto-accepted within the error budget)",
+ "test": {
+  "accepted_n": 425,
+  "wrong_n": 12,
+  "error_upper95": 0.049,
+  "auto_accept_coverage": 0.545,
+  "auto_accept_error": 0.028,
+  "asked": 0.455,
+  "asked_in_top3": 0.839,
+  "correct_if_user_picks_from_top3": 0.912
+ },
+ "test_audited": {
+  "accepted_n": 425,
+  "wrong_n": 2,
+  "error_upper95": 0.017,
+  "auto_accept_coverage": 0.545,
+  "auto_accept_error": 0.005,
+  "asked": 0.455,
+  "asked_in_top3": 0.839,
+  "correct_if_user_picks_from_top3": 0.924
+ },
+ "top1_test": {
+  "recall_list": 0.938,
+  "R1": 0.828,
+  "R2": 0.868,
+  "R3": 0.85
+ },
+ "top1_test_audited": {
+  "recall_list": 0.938,
+  "R1": 0.841,
+  "R2": 0.881,
+  "R3": 0.863
+ },
+ "n_validation": 780,
+ "n_test": 780,
+ "all_policies_test": {
+  "R1": {
+   "accepted_n": 0,
+   "wrong_n": 0,
+   "error_upper95": 1.0,
+   "auto_accept_coverage": 0.0,
+   "auto_accept_error": 1.0,
+   "asked": 1.0,
+   "asked_in_top3": 0.913,
+   "correct_if_user_picks_from_top3": 0.913
+  },
+  "R2": {
+   "accepted_n": 425,
+   "wrong_n": 12,
+   "error_upper95": 0.049,
+   "auto_accept_coverage": 0.545,
+   "auto_accept_error": 0.028,
+   "asked": 0.455,
+   "asked_in_top3": 0.839,
+   "correct_if_user_picks_from_top3": 0.912
+  },
+  "R3": {
+   "accepted_n": 0,
+   "wrong_n": 0,
+   "error_upper95": 1.0,
+   "auto_accept_coverage": 0.0,
+   "auto_accept_error": 1.0,
+   "asked": 1.0,
+   "asked_in_top3": 0.913,
+   "correct_if_user_picks_from_top3": 0.913
+  },
+  "R2+R3": {
+   "accepted_n": 425,
+   "wrong_n": 12,
+   "error_upper95": 0.049,
+   "auto_accept_coverage": 0.545,
+   "auto_accept_error": 0.028,
+   "asked": 0.455,
+   "asked_in_top3": 0.839,
+   "correct_if_user_picks_from_top3": 0.912
+  }
+ },
+ "unseen_names": {
+  "n": 260,
+  "held_out_names": 26,
+  "R1_top1": 0.769,
+  "R2_top1": 0.804
+ }
+}

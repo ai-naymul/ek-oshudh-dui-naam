@@ -14,10 +14,10 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.core import explain_bn
-from app.core.candidates import Candidate, CandidateIndex
-from app.core.graph import ROOT, Graph
-from app.core.rerank import distinct_brands, r1, r3
+from app.core.candidates import Candidate, CandidateIndex, parse_hints
 from app.core.decide import Decider, products_per_brand
+from app.core.graph import ROOT, Graph, brand_key
+from app.core.rerank import distinct_brands, r1, r3
 from app.core.rules import Item, Rules
 from app.core.schedule import parse as parse_schedule
 
@@ -105,7 +105,7 @@ class Engine:
     def match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool) -> tuple:
         """-> (chosen product or None, confidence, method, needs_confirm, candidates in display order)."""
         if self.decider is not None:
-            return self._match_r2(reading, alternatives, crop_parts)
+            return self._match_r2(reading, alternatives, crop_parts, exact_ok=not handwritten)
         cands = self.index.search(reading, 20)
         seen = {c.product_id for c in cands}
         for alt in alternatives[:3]:
@@ -127,9 +127,11 @@ class Engine:
                 return third.candidate, third.confidence, "R3", True, cands
         return first.candidate, first.confidence, "R1", True, cands
 
-    def _match_r2(self, reading: str, alternatives: list[str], crop_parts: list | None) -> tuple:
+    def _match_r2(self, reading: str, alternatives: list[str], crop_parts: list | None, exact_ok: bool = False) -> tuple:
         """Shipped policy from E1 (models/policy.json): accept when the decision model is sure; otherwise ask the
-        constrained AI to pick from the model's top-5 and accept only if it independently agrees; else ask the user."""
+        constrained AI to pick from the model's top-5 and accept only if it independently agrees; else ask the user.
+        exact_ok (typed names, printed strips/boxes): the threshold was calibrated on handwriting, so for these an
+        exact registry brand name is accepted as written; anything fuzzier still follows the policy."""
         cands, ranked = self.decider.rank_reading(self.index, reading, alternatives, self.ppb)
         if not ranked:
             return None, 0.0, "none", True, []
@@ -137,11 +139,15 @@ class Engine:
         top, p = ranked[0]
         if p >= self.policy["r2_accept"]:
             return top, round(p, 3), "R2", False, order
+        if exact_ok and brand_key(parse_hints(reading)[0]) == brand_key(top.brand):
+            return top, round(p, 3), "exact name", False, order
         if crop_parts:
             third = r3(crop_parts, [c for c, _ in ranked[:5]], k=5)
             agree_min = self.policy.get("agree_min")
             if third.candidate and third.candidate.brand == top.brand and agree_min is not None and p >= agree_min:
                 return top, round(p, 3), "R2+R3 agree", False, order
+            if third.candidate and third.candidate.brand == top.brand:  # agree, but the policy still wants a tap
+                return top, round(p, 3), "R2+R3 agree, confirm", True, order
             if third.candidate:  # disagreement: show the AI's pick first, but the user decides
                 order = [third.candidate] + [c for c in order if c.brand != third.candidate.brand]
                 return third.candidate, round(p, 3), "R2/R3 disagree", True, order

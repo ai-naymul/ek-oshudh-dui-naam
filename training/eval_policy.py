@@ -54,7 +54,7 @@ def score_rows(reader, split, idx, dec, ppb):
                "in_list": low(rec["label"]) in {low(c.brand) for c in cands},
                "r1": c1.candidate.brand if c1.candidate else None, "r1_conf": c1.confidence,
                "r2": [[c.brand, round(p, 4)] for c, p in ranked[:5]]}
-        if key in cache and cache[key].get("r2_top5_for_r3") == [b for b, _ in row["r2"]]:
+        if key in cache and "r3_error" not in cache[key] and cache[key].get("r2_top5_for_r3") == [b for b, _ in row["r2"]]:
             row.update({k: cache[key][k] for k in ("r3", "r3_conf")})
         else:
             try:
@@ -100,13 +100,24 @@ def evaluate(rows, policy):
         else:
             asked_n += 1
             asked_in3 += low(r["label"]) in {low(b) for b in top3}
-    return {"auto_accept_coverage": round(acc_n / n, 3), "auto_accept_error": round(1 - acc_ok / max(1, acc_n), 3),
+    return {"accepted_n": acc_n, "wrong_n": acc_n - acc_ok, "error_upper95": round(wilson_upper(acc_n - acc_ok, acc_n), 3),
+            "auto_accept_coverage": round(acc_n / n, 3), "auto_accept_error": round(1 - acc_ok / max(1, acc_n), 3),
             "asked": round(asked_n / n, 3), "asked_in_top3": round(asked_in3 / max(1, asked_n), 3),
             "correct_if_user_picks_from_top3": round((acc_ok + asked_in3) / n, 3)}
 
 
+def wilson_upper(wrong, n, z=1.96):
+    """95% upper confidence bound of an error rate seen as wrong/n (Wilson score interval)."""
+    if n == 0:
+        return 1.0
+    p = wrong / n
+    return (p + z * z / (2 * n) + z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)) / (1 + z * z / n)
+
+
 def fit(rows, method):
-    """Lowest thresholds on validation with auto-accept error <= MAX_ERR; maximise coverage."""
+    """Thresholds on validation that maximise coverage while we are 95% confident (Wilson upper bound) that the
+    auto-accept error is <= MAX_ERR. A plain 'error <= 2% on validation' sits on the edge of the sample and drifts
+    above 2% on new data (we saw 3.4-4.5% on test with that rule), so the bound adds the needed margin."""
     grid = np.round(np.arange(0.0, 1.0001, 0.01), 2)
     best = None
     t_agree_grid = grid if method == "R2+R3" else [None]
@@ -114,9 +125,21 @@ def fit(rows, method):
         for t in grid:
             pol = {"method": method, "t": float(t), "t_agree": None if ta is None else float(ta)}
             ev = evaluate(rows, pol)
-            if ev["auto_accept_error"] <= MAX_ERR and (best is None or ev["auto_accept_coverage"] > best[1]["auto_accept_coverage"]):
+            if ev["error_upper95"] <= MAX_ERR and (best is None or ev["auto_accept_coverage"] > best[1]["auto_accept_coverage"]):
                 best = (pol, ev)
     return best or ({"method": method, "t": 1.01, "t_agree": 1.01}, evaluate(rows, {"method": method, "t": 1.01, "t_agree": 1.01}))
+
+
+def audited(rows):
+    """Apply eval/label_audit.csv: dataset labels that a person checked against the image and found wrong.
+    Only disagreements among automatic accepts were audited, so audited numbers are a best case; raw ones stay."""
+    import csv
+    path = os.path.join(ROOT, "eval", "label_audit.csv")
+    if not os.path.exists(path):
+        return rows
+    fix = {(r["split"], r["file"]): r["image_shows"] for r in csv.DictReader(open(path, encoding="utf-8"))
+           if r["verdict"] == "label_error"}
+    return [{**r, "label": fix.get((r["split"], r["file"]), r["label"])} for r in rows]
 
 
 def top1(rows):
@@ -135,10 +158,11 @@ def main():
     val = score_rows(reader, "validation", idx, dec, ppb)
     test = score_rows(reader, "test", idx, dec, ppb)
     report = {"reader": reader, "n_validation": len(val), "n_test": len(test), "max_auto_error": MAX_ERR,
-              "top1_test": top1(test), "top1_validation": top1(val), "policies": {}}
+              "top1_test": top1(test), "top1_test_audited": top1(audited(test)), "top1_validation": top1(val), "policies": {}}
     for method in ("R1", "R2", "R3", "R2+R3"):
         pol, ev_val = fit(val, method)
-        report["policies"][method] = {"thresholds": pol, "validation": ev_val, "test": evaluate(test, pol)}
+        report["policies"][method] = {"thresholds": pol, "validation": ev_val, "test": evaluate(test, pol),
+                                      "test_audited": evaluate(audited(test), pol)}
     chosen = max(report["policies"], key=lambda m: report["policies"][m]["validation"]["auto_accept_coverage"])
     report["chosen"] = chosen
     train_rep = os.path.join(OUT, "e1_full_report.json")
@@ -147,8 +171,14 @@ def main():
     json.dump(report, open(os.path.join(OUT, f"e1_policy_report_{reader}.json"), "w"), indent=1)
     p = report["policies"][chosen]
     policy = {"method": chosen, "reader": reader, "r2_accept": p["thresholds"]["t"], "agree_min": p["thresholds"]["t_agree"],
-              "max_auto_error": MAX_ERR, "chosen_on": "validation split (most items auto-accepted within the error budget)",
-              "test": p["test"], "top1_test": report["top1_test"]}
+              "max_auto_error": MAX_ERR, "threshold_rule": "95% upper bound of validation error <= max_auto_error",
+              "chosen_on": "validation split (most items auto-accepted within the error budget)",
+              "test": p["test"], "test_audited": p["test_audited"], "top1_test": report["top1_test"],
+              "top1_test_audited": top1(audited(test)), "n_validation": len(val), "n_test": len(test),
+              "all_policies_test": {m: report["policies"][m]["test"] for m in report["policies"]}}
+    unseen = report.get("decision_model_training", {}).get("B_unseen_names")
+    if unseen:
+        policy["unseen_names"] = {k: unseen[k] for k in ("n", "held_out_names", "R1_top1", "R2_top1") if k in unseen}
     json.dump(policy, open(os.path.join(ROOT, "models", "policy.json"), "w"), indent=1)
     print(json.dumps(report, indent=1))
 

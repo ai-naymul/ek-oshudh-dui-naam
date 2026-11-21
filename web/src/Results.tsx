@@ -130,7 +130,7 @@ function CardSheet({ result, onClose }: { result: CheckResult; onClose: () => vo
   )
 }
 
-type Rates = { auto_accept_coverage: number; auto_accept_error: number; asked_in_top3: number; correct_if_user_picks_from_top3: number }
+type Rates = { auto_accept_coverage: number; auto_accept_error: number; asked_in_top3: number; correct_if_user_picks_from_top3: number; wrong_n?: number; accepted_n?: number }
 const pct = (x: unknown) => (typeof x === 'number' ? `${(x * 100).toFixed(1)}%` : '–')
 
 // Matching quality, read from models/policy.json (written by training/eval_policy.py): nothing here is typed in by hand.
@@ -138,6 +138,7 @@ function EvalCard({ policy }: { policy: Record<string, unknown> }) {
   const test = policy.test as Rates | undefined
   const top1 = policy.top1_test as Record<string, number> | undefined
   if (!test || !top1) return null
+  const audited = policy.test_audited as Rates | undefined
   const unseen = policy.unseen_names as { held_out_names: number; R1_top1: number; R2_top1: number } | undefined
   const rows: [string, string, number | undefined][] = [
     ['R1', 'fuzzy string match', top1.R1], ['R2', 'decision model (LightGBM)', top1.R2], ['R3', 'AI picks from top-5', top1.R3],
@@ -162,6 +163,9 @@ function EvalCard({ policy }: { policy: Record<string, unknown> }) {
         <div className="rounded-lg bg-paper p-2"><p className="text-muted">Accepted automatically</p><p className="text-lg font-bold tabular-nums">{pct(test.auto_accept_coverage)}</p><p className="text-xs text-muted">wrong among them: {pct(test.auto_accept_error)}</p></div>
         <div className="rounded-lg bg-paper p-2"><p className="text-muted">Asked to confirm</p><p className="text-lg font-bold tabular-nums">{pct(1 - test.auto_accept_coverage)}</p><p className="text-xs text-muted">right answer in the 3 shown: {pct(test.asked_in_top3)}</p></div>
       </div>
+      {audited && audited.wrong_n !== undefined && (
+        <p className="mt-2 text-xs text-muted">We checked every wrong automatic accept against its image: {String(test.wrong_n! - audited.wrong_n)} were mistakes in the dataset's own labels (the image shows the brand we chose). After that check: {String(audited.wrong_n)} wrong of {String(audited.accepted_n)} ({pct(audited.auto_accept_error)}).</p>
+      )}
       {unseen && <p className="mt-2 text-xs text-muted">On {unseen.held_out_names} medicine names the decision model never saw: R2 {pct(unseen.R2_top1)} vs R1 {pct(unseen.R1_top1)}.</p>}
       <p className="mt-2 text-xs text-muted">Shipped policy: {String(policy.method)} · thresholds fitted on a separate validation split (≤{pct(policy.max_auto_error)} wrong automatic accepts), reported once on test.</p>
     </div>

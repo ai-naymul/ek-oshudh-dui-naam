@@ -1,0 +1,15 @@
+split,file,dataset_label,image_shows,verdict,note
+validation,validation_00298.png,Fenadin,ambiguous scrawl (Fomadin/Fenadin),misread,our auto-accept Famodin (famotidine) is a wrong-ingredient error
+validation,validation_00621.png,Opton,NexCap,label_error,image clearly reads NexCap; both esomeprazole
+test,test_00231.png,Dinafex,Fixal,label_error,image clearly reads Fixal; both fexofenadine
+test,test_00291.png,Fenadin,Fexo,label_error,image clearly reads Fexo; both fexofenadine
+test,test_00298.png,Fenadin,Fexo,label_error,image clearly reads Fexo; both fexofenadine
+test,test_00316.png,Fexo,NexCap,label_error,image clearly reads NexCap (esomeprazole); label is a fexofenadine brand
+test,test_00315.png,Fexo,Fenadin,label_error,image clearly reads Fenadin; both fexofenadine
+test,test_00338.png,Fixal,Fenadin,label_error,image clearly reads Fenadin; both fexofenadine
+test,test_00561.png,Nexcap,Opton,label_error,image clearly reads OPTON; both esomeprazole
+test,test_00568.png,Nexcap,Opton,label_error,image clearly reads Opton; both esomeprazole
+test,test_00629.png,Opton,Nexum,label_error,image clearly reads Nexum; both esomeprazole
+test,test_00705.png,Rozith,Rozith,misread,we auto-accepted Roxim (cefixime) for Rozith (azithromycin): wrong-ingredient error
+test,test_00711.png,Sergel,Maxpro,label_error,image clearly reads maxpro; both esomeprazole
+test,test_00757.png,Trilock,Trilock,misread,we auto-accepted Angilock (losartan) for Trilock (montelukast): wrong-ingredient error
