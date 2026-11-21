@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.12
+      - run: uv sync --python 3.12
+      - name: download registry and build the knowledge graph
+        run: bash ../scripts/get_data.sh && uv run python -m app.core.graph
+      - name: deterministic tests (no API key, no network calls in tests)
+        run: uv run pytest -q
