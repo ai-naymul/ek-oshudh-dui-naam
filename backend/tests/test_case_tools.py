@@ -72,3 +72,13 @@ def test_network_addresses_for_opening_on_a_phone(client):
     urls = client.get("/api/network").json()["urls"]
     assert isinstance(urls, list) and all(u.startswith("http://") and u.count(":") == 2 for u in urls)
     assert not any("127.0.0.1" in u or "localhost" in u for u in urls)
+
+
+@pytest.mark.skipif(not os.path.exists(g.DB_PATH), reason="graph not built")
+def test_the_welcome_number_is_the_raw_test_accuracy_not_the_audited_one():
+    import json
+    from app.main import app
+    policy = json.load(open(os.path.join(g.ROOT, "models", "policy.json")))
+    ev = TestClient(app).get("/api/stats").json()["eval"]
+    assert ev["top1"] == policy["top1_test"]["R2"]
+    assert ev["top1_audited"] == policy["top1_test_audited"]["R2"]

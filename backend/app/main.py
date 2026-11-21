@@ -286,7 +286,8 @@ def stats():
     ev = None
     if pol.get("test"):
         ev = {"n_test": pol.get("n_test"), "reader": pol.get("reader"), "method": pol.get("method"),
-              "top1": (pol.get("top1_test_audited") or pol.get("top1_test") or {}).get("R2"),
+              "top1": (pol.get("top1_test") or {}).get("R2"),                       # raw labels: the number we lead with
+              "top1_audited": (pol.get("top1_test_audited") or {}).get("R2"),
               "auto_accept": pol["test"].get("auto_accept_coverage"),
               "auto_error_audited": (pol.get("test_audited") or {}).get("auto_accept_error")}
     return live({**_registry_stats(), "eval": ev}, t0)
