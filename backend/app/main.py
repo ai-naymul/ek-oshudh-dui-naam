@@ -59,6 +59,13 @@ def api_health():
             "aliases_skipped": e.index.alias_errors, "request_id": uuid.uuid4().hex[:12], "server_time": time.time()}
 
 
+@app.get("/api/copy")
+def copy_text():
+    """The app's wording (config/copy_bn.json): the same file the rules use."""
+    from app.core.explain_bn import load_copy
+    return {"ui": load_copy().get("ui", {}), "titles": load_copy()["titles"]}
+
+
 @app.post("/api/cases/sample")
 def sample_case():
     t0 = time.time()

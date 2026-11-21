@@ -1,5 +1,4 @@
 """Golden cases for the deterministic rules. Products are looked up by brand + strength + form from the real registry."""
-import inspect
 import os
 
 import pytest
@@ -95,7 +94,8 @@ def test_clean_case_has_no_warnings(rules):
 def test_explanations_never_say_stop_or_safe(rules):
     _, f = Rules(rules.g, {"dose_limits": True, "not_on_rx_finding": True}).check([rx(rules, 1, "Napa", per_day=6, strength="500"), rx(rules, 2, "Ace", per_day=3, strength="500", doc="Rx2"),
                         rx(rules, 3, "Seclo", strength="20", form="Capsule"), rx(rules, 4, "Maxpro", strength="20", form="Capsule")])
-    texts = " ".join(explain_bn.explain(x)["bn"] for x in f) + inspect.getsource(explain_bn)
+    texts = " ".join(explain_bn.explain(x)["bn"] for x in f) + open(explain_bn.COPY_PATH, encoding="utf-8").read()
     for banned in ("বন্ধ করুন", "খাবেন না", "নিরাপদ"):
         assert banned not in texts
-    assert all(explain_bn.ASK in explain_bn.explain(x)["bn"] for x in f if x.severity == "red")
+    ask = explain_bn.load_copy()["ask"]["bn"]
+    assert all(ask in explain_bn.explain(x)["bn"] for x in f if x.severity == "red")

@@ -1,0 +1,107 @@
+{
+ "_about": "All user-facing wording. Edit and save: the server picks up changes on the next request. Placeholders in {braces} are filled by the rules. Never add wording that tells someone to end a medicine or calls a combination harmless; tests/test_copy.py scans this file.",
+ "ask": {
+  "bn": "ডাক্তার বা ফার্মাসিস্টকে দেখান।",
+  "en": "Show this to your doctor or pharmacist."
+ },
+ "words": {
+  "and_bn": " আর ",
+  "list_sep_bn": "، ",
+  "and_en": " and ",
+  "each_two_bn": "দুটোতেই",
+  "each_many_bn": "সবগুলোতেই",
+  "each_two_en": "both",
+  "each_many_en": "all",
+  "who_bn": " ({n} জন ডাক্তারের প্রেসক্রিপশন থেকে)",
+  "together_bn": "মিলে",
+  "from_one_bn": "থেকে",
+  "lead_many_en": "Together {brands} give",
+  "lead_one_en": "{brands} gives"
+ },
+ "titles": {
+  "DUP_INGREDIENT": {
+   "bn": "একই ওষুধ দুইবার",
+   "en": "Same medicine twice"
+  },
+  "DUP_ASK_CURRENT": {
+   "bn": "দুটোই কি এখন খাচ্ছেন?",
+   "en": "Are both taken now?"
+  },
+  "SAME_CLASS": {
+   "bn": "একই ধরনের ওষুধ: আরও যাচাই দরকার",
+   "en": "Same family: needs checking"
+  },
+  "DOSE_OVER": {
+   "bn": "দিনের মাত্রা সীমার বেশি",
+   "en": "Daily amount over the limit"
+  },
+  "RISKY_PAIR": {
+   "bn": "একসাথে খেলে সমস্যা হতে পারে",
+   "en": "This combination needs checking"
+  },
+  "OTC_ONLY": {
+   "bn": "প্রেসক্রিপশনে নেই",
+   "en": "Not on any prescription"
+  },
+  "CONFIRM_FIRST": {
+   "bn": "নিশ্চিত করুন",
+   "en": "Please confirm"
+  },
+  "UNKNOWN": {
+   "bn": "চেনা যায়নি",
+   "en": "Not found"
+  }
+ },
+ "templates": {
+  "DUP_INGREDIENT": {
+   "bn": "{brands}{who}: {each} একই উপাদান {ings} আছে। {ask}",
+   "en": "{brands} {each} contain {ings}. {ask}"
+  },
+  "DUP_ASK_CURRENT": {
+   "bn": "{brands}{who}: {each} একই উপাদান {ings} আছে। এগুলো কি এখন একসাথে খাচ্ছেন? প্রতিটি ওষুধে জানিয়ে দিন।",
+   "en": "{brands} {each} contain {ings}. Are they being taken now? Mark each medicine."
+  },
+  "SAME_CLASS": {
+   "bn": "{brands} দুটোই {group_bn}। দুটোই দরকার কি না জেনে নিন। {ask}",
+   "en": "{brands} are both {group}. Ask whether both are needed. {ask}"
+  },
+  "DOSE_OVER": {
+   "bn": "{brands} {joined} দিনে {total} মিলিগ্রাম {ingredient} হচ্ছে; সীমা {max} মিলিগ্রাম। {ask}",
+   "en": "{lead} {total} mg of {ingredient} a day; the limit is {max} mg. {ask}"
+  },
+  "RISKY_PAIR": {
+   "bn": "{note}। {ask}",
+   "en": "{note}. {ask}"
+  },
+  "OTC_ONLY": {
+   "bn": "{brand} কোনো প্রেসক্রিপশনে নেই। ডাক্তার জানেন কি না নিশ্চিত হোন। {ask}",
+   "en": "{brand} is not on any prescription. Make sure the doctor knows. {ask}"
+  },
+  "CONFIRM_FIRST.voice": {
+   "bn": "কথায় শোনা নামটি নিশ্চিত নয়: এটা কি {brand}? তালিকা থেকে বেছে নিশ্চিত করুন।",
+   "en": "The spoken name is not certain: is this {brand}? Please pick it from the list to confirm."
+  },
+  "CONFIRM_FIRST.text": {
+   "bn": "লেখা নামটি তালিকার সাথে পুরো মেলেনি: এটা কি {brand}? বেছে নিশ্চিত করুন।",
+   "en": "The typed name does not fully match the registry: is this {brand}? Please confirm."
+  },
+  "CONFIRM_FIRST.handwritten": {
+   "bn": "হাতের লেখা পুরো পরিষ্কার নয়: এটা কি {brand}? ছবির সাথে মিলিয়ে নিশ্চিত করুন।",
+   "en": "The handwriting is unclear: is this {brand}? Please confirm against the photo."
+  },
+  "CONFIRM_FIRST.photo": {
+   "bn": "ছবির লেখা পুরো পরিষ্কার নয়: এটা কি {brand}? ছবির সাথে মিলিয়ে নিশ্চিত করুন।",
+   "en": "The text in the photo is unclear: is this {brand}? Please confirm against the photo."
+  },
+  "UNKNOWN": {
+   "bn": "এই ওষুধটি নিবন্ধিত তালিকায় পাওয়া যায়নি। স্ট্রিপ বা বাক্সের ছবি দিন।",
+   "en": "This medicine was not found in the registry. Please add a photo of the strip or box."
+  }
+ },
+ "speech": {
+  "none": "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি। তবুও ওষুধের তালিকাটি ডাক্তার বা ফার্মাসিস্টকে দেখান।",
+  "head_red": "সতর্কতা। ",
+  "head_amber": "খেয়াল রাখুন। "
+ },
+ "ui": {}
+}

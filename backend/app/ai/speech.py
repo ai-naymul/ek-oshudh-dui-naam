@@ -53,9 +53,11 @@ def findings_speech(findings: list[dict]) -> str:
     """Bangla script for the voice reply, built only from the template findings (red first, then amber)."""
     order = {"red": 0, "amber": 1, "info": 2}
     chosen = sorted([f for f in findings if f["severity"] in ("red", "amber")], key=lambda f: order[f["severity"]])[:4]
+    from app.core.explain_bn import load_copy
+    s = load_copy()["speech"]
     if not chosen:
-        return "আমাদের যাচাইয়ে বড় কোনো সমস্যা পাওয়া যায়নি। তবুও ওষুধের তালিকাটি ডাক্তার বা ফার্মাসিস্টকে দেখান।"
-    head = "সতর্কতা। " if chosen[0]["severity"] == "red" else "খেয়াল রাখুন। "
+        return s["none"]
+    head = s["head_red"] if chosen[0]["severity"] == "red" else s["head_amber"]
     return head + " ".join(f["bn"] for f in chosen)
 
 
