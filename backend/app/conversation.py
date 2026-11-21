@@ -52,6 +52,7 @@ class CaseItem:
     schedule: dict
     doctor: str | None
     crop: bytes | None = None
+    agent: dict | None = None     # the resolver's suggestion for an unclear item (still needs the user's tap)
 
 
 @dataclass
@@ -227,6 +228,27 @@ class Engine:
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
         return audio, mime, text
 
+    def resolve(self, case: Case, item_id: str) -> dict:
+        """Ask the agent to look for evidence for one unclear item. It can only reorder the options and explain;
+        the item still waits for the user's confirmation."""
+        from app.agent.resolver import safe_resolve
+        it = next(i for i in case.items if i.item_id == item_id)
+        t0 = time.time()
+        out = safe_resolve(self, case, it)
+        case.step("agent", t0, item=item_id, tools=[s["tool"] for s in out.get("steps", [])], grounded=out.get("grounded"),
+                  suggestion=self.graph.product(out["product_id"]).brand if out.get("product_id") else None)
+        if out.get("product_id"):
+            pid = out["product_id"]
+            p = self.graph.product(pid)
+            first = {"product_id": pid, "brand": p.brand, "strength": p.strength, "form": p.form,
+                     "maker": p.manufacturer, "generic": "", "score": 1.0}
+            it.options = [first] + [o for o in it.options if o["brand"] != p.brand][:2]
+            it.agent = {"product_id": pid, "brand": p.brand, "reason_bn": out["reason_bn"],
+                        "tools": [s["tool"] for s in out["steps"]]}
+        else:
+            it.agent = {"product_id": None, "brand": None, "reason_bn": "", "tools": [s["tool"] for s in out.get("steps", [])]}
+        return self.item_view(it)
+
     def confirm(self, case: Case, item_id: str, product_id: int | None, per_day: float | None = None) -> dict:
         it = next(i for i in case.items if i.item_id == item_id)
         it.product_id, it.needs_confirm, it.method = product_id, False, "user"
@@ -263,4 +285,5 @@ class Engine:
         return {"item_id": it.item_id, "doc_id": it.doc_id, "source": it.source, "reading": it.reading,
                 "alternatives": it.alternatives, "handwritten": it.handwritten, "agree": it.agree, "chosen": chosen,
                 "confidence": it.confidence, "method": it.method, "needs_confirm": it.needs_confirm,
-                "options": it.options, "schedule": it.schedule, "per_day": it.per_day, "has_crop": it.crop is not None}
+                "options": it.options, "schedule": it.schedule, "per_day": it.per_day, "has_crop": it.crop is not None,
+                "agent": it.agent}

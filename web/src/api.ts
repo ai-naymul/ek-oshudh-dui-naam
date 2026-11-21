@@ -35,6 +35,7 @@ export type ItemView = {
   confidence: number; method: string; needs_confirm: boolean; options: Option[]
   schedule: { morning: number | null; noon: number | null; night: number | null; per_day: number | null; meal: string | null; days: number | null }
   per_day: number | null; has_crop: boolean
+  agent: { product_id: number | null; brand: string | null; reason_bn: string; tools: string[] } | null
 }
 export type Finding = { rule: string; severity: 'red' | 'amber' | 'info'; title_bn: string; title_en: string; bn: string; en: string; source: string; meds: string[] }
 export type Path = { brand: string; strength: string; form: string; maker: string; ingredients: { name: string; strength: string; class: string | null }[] }
@@ -77,6 +78,7 @@ export const api = {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.blob()
   },
+  resolve: (cid: string, iid: string) => call<ItemView>(`/api/cases/${cid}/items/${iid}/resolve`, { method: 'POST' }),
   check: (cid: string) => call<CheckResult>(`/api/cases/${cid}/check`),
   search: (q: string) => call<{ options: Option[]; path: Path | null; latency_ms: number; request_id: string }>(`/api/brands/search?q=${encodeURIComponent(q)}`),
   random: () => call<{ brand: string; path: Path; latency_ms: number; request_id: string }>('/api/brands/random'),

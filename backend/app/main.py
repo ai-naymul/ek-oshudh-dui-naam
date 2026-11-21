@@ -123,6 +123,16 @@ def confirm(case_id: str, item_id: str, body: ConfirmIn):
         raise HTTPException(404, "item not found")
 
 
+@app.post("/api/cases/{case_id}/items/{item_id}/resolve")
+def resolve_item(case_id: str, item_id: str):
+    """Agent looks for evidence (other medicines in the case, registry lookups) for one unclear item."""
+    t0 = time.time()
+    case = _case(case_id)
+    if not any(i.item_id == item_id for i in case.items):
+        raise HTTPException(404, "item not found")
+    return live(engine().resolve(case, item_id), t0)
+
+
 @app.get("/api/cases/{case_id}/check")
 def check(case_id: str):
     t0 = time.time()

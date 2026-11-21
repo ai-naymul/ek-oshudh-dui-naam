@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote } from 'lucide-react'
+import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles } from 'lucide-react'
 import { Recorder } from './Recorder'
 import { api, bn, shrink, type ItemView } from './api'
 
@@ -117,7 +117,8 @@ export function CaseScreen({ caseId, items, setItems, onCheck }: {
         <AnimatePresence initial={false}>
           {items.map((it, i) => (
             <motion.div key={it.item_id} layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: Math.min(i, 6) * 0.05 }}>
-              <ItemCard caseId={caseId} it={it} onChoose={(pid) => choose(it, pid)} />
+              <ItemCard caseId={caseId} it={it} onChoose={(pid) => choose(it, pid)}
+                onResolve={async () => { const v = await api.resolve(caseId, it.item_id); setItems((prev) => prev.map((x) => (x.item_id === it.item_id ? v : x))) }} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -148,7 +149,8 @@ function Tile({ icon, label, onClick }: { icon: React.ReactNode; label: string; 
   )
 }
 
-function ItemCard({ caseId, it, onChoose }: { caseId: string; it: ItemView; onChoose: (pid: number | null) => void }) {
+function ItemCard({ caseId, it, onChoose, onResolve }: { caseId: string; it: ItemView; onChoose: (pid: number | null) => void; onResolve: () => Promise<void> }) {
+  const [looking, setLooking] = useState(false)
   const sched = it.schedule
   const slots = sched && [sched.morning, sched.noon, sched.night].some((v) => v !== null) ? `${bn(sched.morning ?? 0)}+${bn(sched.noon ?? 0)}+${bn(sched.night ?? 0)}` : null
   return (
@@ -174,15 +176,27 @@ function ItemCard({ caseId, it, onChoose }: { caseId: string; it: ItemView; onCh
       {it.needs_confirm && (
         <div className="mt-3">
           <p className="mb-2 text-sm font-semibold text-warn">{it.has_crop ? 'এটা কোনটা? ছবির সাথে মিলিয়ে বেছে নিন' : 'এটা কোনটা? বেছে নিন'}</p>
+          {it.agent?.reason_bn && (
+            <motion.p className="mb-2 flex gap-2 rounded-xl bg-brand-soft p-2.5 text-[15px] text-ink" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+              <Sparkles size={16} className="mt-1 shrink-0 text-brand" /><span>{it.agent.reason_bn}</span>
+            </motion.p>
+          )}
+          {it.agent && !it.agent.product_id && <p className="mb-2 text-sm text-muted">আর কোনো সূত্র পাওয়া যায়নি; ছবির সাথে মিলিয়ে নিজে বেছে নিন।</p>}
           <div className="flex flex-wrap gap-2">
             {it.options.map((o) => (
               <motion.button key={o.product_id} whileTap={{ scale: 0.95 }} onClick={() => onChoose(o.product_id)}
-                className="rounded-full border border-line bg-paper px-3 py-1.5 font-sans text-sm font-semibold">
+                className={`rounded-full border px-3 py-1.5 font-sans text-sm font-semibold ${it.agent?.product_id === o.product_id ? 'border-brand bg-brand-soft ring-2 ring-brand/30' : 'border-line bg-paper'}`}>
                 {o.brand} <span className="font-normal text-muted">{o.strength}</span>
               </motion.button>
             ))}
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => onChoose(null)} className="rounded-full px-3 py-1.5 text-sm text-muted underline">কোনোটাই না</motion.button>
           </div>
+          {!it.agent && (
+            <motion.button whileTap={{ scale: 0.97 }} disabled={looking} onClick={async () => { setLooking(true); try { await onResolve() } finally { setLooking(false) } }}
+              className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-brand disabled:opacity-60">
+              {looking ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} সূত্র খুঁজুন (কেসের অন্য ওষুধ মিলিয়ে)
+            </motion.button>
+          )}
         </div>
       )}
     </div>

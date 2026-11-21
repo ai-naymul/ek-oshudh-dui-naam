@@ -100,6 +100,40 @@ def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, t
     return _post(model, parts, gc, retries, timeout, lambda c: json.loads(_text(c)) if schema is not None else _text(c))
 
 
+def chat(contents: list, tools: list, model: str = LITE_MODEL, retries: int = 2, timeout: int = 60) -> tuple[dict, dict]:
+    """Multi-turn call with function declarations (agent loop). Returns the model's content (all parts kept, so
+    any thought signatures go back unchanged on the next turn) and meta."""
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise GeminiError("GEMINI_API_KEY is not set")
+    body = json.dumps({"contents": contents, "tools": [{"functionDeclarations": tools}],
+                       "generationConfig": {"temperature": 0}}).encode()
+    last = ""
+    for attempt in range(retries + 1):
+        req = urllib.request.Request(URL.format(model=model), data=body,
+                                     headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        t0 = time.time()
+        try:
+            with _SEM:
+                resp = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
+            content = resp["candidates"][0]["content"]
+            return content, {"model": model, "seconds": round(time.time() - t0, 2),
+                             "tokens": resp.get("usageMetadata", {}).get("totalTokenCount")}
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code}: {e.read().decode()[:200]}"
+            if e.code in (429, 500, 502, 503, 504) and attempt < retries:
+                time.sleep(2 * (attempt + 1))
+                continue
+            break
+        except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError,
+                http.client.HTTPException, ConnectionError, OSError) as e:
+            last = f"{type(e).__name__}: {e}"
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+    raise GeminiError(f"{model} failed: {last}")
+
+
 def transcribe(parts: list, model: str, retries: int = 2, timeout: int = 60) -> tuple[str, dict]:
     """Speech-to-text model: audio part(s) in, plain text out (no generation config)."""
     return _post(model, parts, {}, retries, timeout, _text)
