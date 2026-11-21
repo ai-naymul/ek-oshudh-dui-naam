@@ -32,26 +32,35 @@ export type ItemView = {
   per_day: number | null; has_crop: boolean
   agent: { product_id: number | null; brand: string | null; reason_bn: string; tools: string[] } | null
   doctor: string | null
+  taking: Taking
 }
+export type Taking = 'current' | 'stopped' | 'unsure'
 export type Finding = { rule: string; severity: 'red' | 'amber' | 'info'; title_bn: string; title_en: string; bn: string; en: string; source: string; meds: string[] }
 export type Path = { brand: string; strength: string; form: string; maker: string; ingredients: { name: string; strength: string; class: string | null }[] }
 export type Medicine = {
   med_id: string; brand: string; strength: string; form: string; path: Path; per_day: number | null; from_rx: boolean
-  doctors: string[]; monthly_cost: number | null; cheaper: { brand: string; maker: string; unit_price: number }[]; items: string[]
+  doctors: string[]; taking: Taking; monthly_cost: number | null; cheaper: { brand: string; maker: string; unit_price: number }[]; items: string[]
 }
 export type Stats = {
   products: number; brand_names: number; generics: number
   examples: { ingredient: string; brand_count: number; brands: string[] }[]
   eval: { n_test: number; reader: string; method: string; top1: number; auto_accept: number; auto_error_audited: number | null } | null
 }
+export type Health = { registry: { products: number; ready: boolean }
+  ai: { key_present: boolean; last_ok_at: number | null; last_error_at: number | null; last_error: string | null } }
 export type TraceStep = { step: string; ms: number; [k: string]: unknown }
 export type CheckResult = { case_id: string; medicines: Medicine[]; findings: Finding[]; trace: TraceStep[]; policy: Record<string, unknown>; request_id: string; latency_ms: number }
+
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) { super(message); this.status = status }
+}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, { ...init, cache: 'no-store' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error((body as { detail?: string }).detail || `HTTP ${res.status}`)
+    throw new ApiError(res.status, (body as { detail?: string }).detail || `HTTP ${res.status}`)
   }
   return res.json() as Promise<T>
 }
@@ -60,11 +69,19 @@ export const api = {
   stats: () => call<Stats>('/api/stats'),
   newCase: () => call<{ case_id: string }>('/api/cases', { method: 'POST' }),
   getCase: (cid: string) => call<{ case_id: string; items: ItemView[] }>(`/api/cases/${encodeURIComponent(cid)}`),
-  addImage: (cid: string, file: Blob) => {
+  addImage: (cid: string, file: Blob, allowRepeat = false) => {
     const fd = new FormData()
     fd.append('file', file, 'photo.jpg')
-    return call<{ doc_id: string; kind: string; items: ItemView[]; latency_ms: number }>(`/api/cases/${cid}/images`, { method: 'POST', body: fd })
+    return call<{ doc_id: string | null; duplicate_of: string | null; kind: string; items: ItemView[]; latency_ms: number }>(
+      `/api/cases/${cid}/images${allowRepeat ? '?allow_repeat=true' : ''}`, { method: 'POST', body: fd })
   },
+  status: (cid: string, iid: string, taking: Taking) =>
+    call<ItemView>(`/api/cases/${cid}/items/${iid}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taking }) }),
+  remove: (cid: string, iid: string) => call<{ removed: string }>(`/api/cases/${cid}/items/${iid}`, { method: 'DELETE' }),
+  health: () => call<Health>('/api/health'),
+  sample: () => call<{ case_id: string; sample: boolean; items: ItemView[] }>('/api/cases/sample', { method: 'POST' }),
+  copy: () => call<{ ui: Record<string, string> }>('/api/copy'),
+  network: () => call<{ urls: string[] }>('/api/network'),
   addText: (cid: string, text: string) =>
     call<{ items: ItemView[] }>(`/api/cases/${cid}/text`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }),
   confirm: (cid: string, iid: string, product_id: number | null, per_day?: number | null) =>

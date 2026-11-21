@@ -66,3 +66,9 @@ def test_sample_case_is_built_live_from_the_settings_lines(client):
     assert any(i["source"] == "rx" for i in r["items"]) and any(i["source"] != "rx" for i in r["items"])
     chk = client.get(f"/api/cases/{r['case_id']}/check").json()
     assert any(f["rule"] in ("DUP_ASK_CURRENT", "DUP_INGREDIENT") for f in chk["findings"])
+
+
+def test_network_addresses_for_opening_on_a_phone(client):
+    urls = client.get("/api/network").json()["urls"]
+    assert isinstance(urls, list) and all(u.startswith("http://") and u.count(":") == 2 for u in urls)
+    assert not any("127.0.0.1" in u or "localhost" in u for u in urls)

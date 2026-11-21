@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -57,6 +57,24 @@ def api_health():
     return {"registry": {"products": _registry_stats()["products"], "ready": True},
             "ai": {"key_present": bool(os.environ.get("GEMINI_API_KEY")), **STATUS},
             "aliases_skipped": e.index.alias_errors, "request_id": uuid.uuid4().hex[:12], "server_time": time.time()}
+
+
+@app.get("/api/network")
+def network(request: Request):
+    """The laptop's address on the local network, so the QR code opens the app on a phone on the same Wi-Fi."""
+    import socket
+    port = request.url.port or 8000
+    urls = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))          # no packet is sent; this only picks the outgoing interface
+        ip = s.getsockname()[0]
+        s.close()
+        if not ip.startswith("127."):
+            urls.append(f"http://{ip}:{port}")
+    except OSError:
+        pass
+    return {"urls": urls}
 
 
 @app.get("/api/copy")

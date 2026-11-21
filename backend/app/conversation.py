@@ -325,7 +325,7 @@ class Engine:
         every match and finding is computed live, nothing stored."""
         case = self.new_case()
         case.sample = True
-        out = self.add_typed(case, list(self.settings.get("sample_case") or []), rx_doctor="নমুনা প্রেসক্রিপশন")
+        out = self.add_typed(case, list(self.settings.get("sample_case") or []), rx_doctor="ডা. নমুনা")
         return {"case_id": case.case_id, "sample": True, "items": out["items"]}
 
     def set_status(self, case: Case, item_id: str, taking: str) -> dict:
@@ -376,7 +376,7 @@ class Engine:
         for m in meds:
             out_meds.append({"med_id": m.med_id, "brand": m.brand, "strength": m.strength, "form": m.form,
                              "path": self.graph.path(m.product_id), "per_day": m.per_day, "from_rx": m.from_rx,
-                             "doctors": m.doctors, "monthly_cost": Rules.monthly_cost(m),
+                             "doctors": m.doctors, "taking": m.taking, "monthly_cost": Rules.monthly_cost(m),
                              "cheaper": self.rules.cheaper(m.product_id), "items": [s.item_id for s in m.sources]})
         return {"case_id": case.case_id, "medicines": out_meds, "findings": [explain_bn.explain(f) for f in findings],
                 "trace": case.trace[-40:], "policy": self.policy}

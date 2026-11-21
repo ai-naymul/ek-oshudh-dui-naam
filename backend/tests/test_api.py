@@ -50,6 +50,7 @@ def test_two_prescriptions_same_medicine_is_red(client, monkeypatch):
     res = client.get(f"/api/cases/{cid}/check").json()
     reds = [f for f in res["findings"] if f["rule"] == "DUP_INGREDIENT"]
     assert reds and reds[0]["severity"] == "red"
+    assert {m["taking"] for m in res["medicines"]} == {"current"}
     assert "request_id" in res and res["trace"]
 
 

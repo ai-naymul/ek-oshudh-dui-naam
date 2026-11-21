@@ -21,28 +21,32 @@
   --color-muted: #5b6a65;
   --color-danger: #c8382a;
   --color-danger-soft: #fcedeb;
-  --color-warn: #a86200;
+  --color-warn: #8a5000;          /* 5.6:1 on warn-soft, 6.1:1 on paper */
   --color-warn-soft: #fbf1e1;
-  /* aliases kept for older class names */
-  --color-brand: #0b5d4b;
-  --color-brand-soft: #e3f0eb;
-  --color-line: #dce3e0;
   --font-sans: "Hind Siliguri", "Inter Variable", system-ui, sans-serif;
   --font-display: "Anek Bangla Variable", "Hind Siliguri", system-ui, sans-serif;
   --font-print: "Anek Bangla Variable", "Inter Variable", system-ui, sans-serif;
   --font-hand: "Kalam", "Hind Siliguri", cursive;
 }
 
+/* 1rem = 18px at normal size; the A+/A- control scales the whole layout (text and spacing) together */
+html { font-size: calc(112.5% * var(--text-scale, 1)); }
 html, body, #root { min-height: 100%; }
 body {
   margin: 0;
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 18px;
+  font-size: 1rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+/* Reduced motion: no spinning or pulsing either (motion's MotionConfig only covers its own transforms) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin, .animate-pulse { animation: none !important; }
+  * { scroll-behavior: auto !important; }
 }
 
 /* Display type tightens as it grows (Apple typography); Anek's width axis gives it a printed-label feel */
@@ -56,7 +60,6 @@ body {
 
 /* Surfaces: one sheet style for grouped lists; panels get no shadow, only the sheet that floats gets depth */
 .sheet { background: #fff; border-radius: 20px; box-shadow: 0 0 0 1px var(--color-foil); }
-.card { background: #fff; border-radius: 20px; box-shadow: 0 0 0 1px var(--color-foil); }
 .lift { box-shadow: 0 0 0 1px var(--color-foil), 0 12px 32px -12px rgba(11, 93, 75, 0.18); }
 
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--color-rx) 55%, transparent); outline-offset: 2px; border-radius: 12px; }

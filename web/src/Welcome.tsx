@@ -1,83 +1,63 @@
-import { useEffect, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
-import { Camera, ScanSearch, MessageCircle, ShieldCheck } from 'lucide-react'
-import { bn, bnInt, bnPct, type Stats } from './api'
-import { SameMedicine, spring } from './Shell'
+import { useState } from 'react'
+import { motion } from 'motion/react'
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { bnInt, bnPct, type Stats } from './api'
+import { useCopy } from './copy'
+import { Converge, Press, spring } from './Shell'
 
-// Every number here comes from /api/stats (the registry and models/policy.json), never typed in.
-export function Welcome({ stats, onStart, starting }: { stats: Stats | null; onStart: () => void; starting: boolean }) {
-  const reduce = useReducedMotion()
+// Numbers come from /api/stats (the registry and models/policy.json). The example is chosen by the person, not rotated.
+export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | null; onStart: () => void; onSample: () => void; busy: boolean }) {
+  const t = useCopy()
   const examples = stats?.examples.filter((e) => e.brands.length >= 2) ?? []
   const [i, setI] = useState(0)
-  useEffect(() => {
-    if (examples.length < 2 || reduce) return
-    const t = window.setInterval(() => setI((x) => (x + 1) % examples.length), 5200)
-    return () => window.clearInterval(t)
-  }, [examples.length, reduce])
-  const ex = examples.length ? examples[i % examples.length] : null
-  const para = stats?.examples.find((e) => e.ingredient === 'Paracetamol')
-  const lead = para ?? stats?.examples[0]
+  const ex = examples.length ? examples[((i % examples.length) + examples.length) % examples.length] : null
+  const lead = stats?.examples.find((e) => e.ingredient === 'Paracetamol') ?? stats?.examples[0]
 
   return (
-    <motion.main className="mx-auto grid max-w-6xl gap-10 px-5 pb-12 pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:gap-16 lg:px-8 lg:pt-16"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -12 }} transition={spring}>
-      <section>
-        <h1 className="display text-[2.4rem] text-ink sm:text-[3.2rem] lg:text-[3.6rem]">একই ওষুধ, ভিন্ন নাম,<br />দ্বিগুণ ঝুঁকি।</h1>
-        <p className="mt-5 max-w-[34rem] text-[19px] text-muted">
-          {lead
-            ? <>বাংলাদেশে শুধু <span className="print font-semibold text-ink">{lead.ingredient}</span> বিক্রি হয় {bnInt(lead.brand_count)}টি আলাদা নামে। দুই ডাক্তার দুই নামে একই ওষুধ লিখলে বাড়িতে কেউ টেরও পায় না।</>
-            : 'দুই ডাক্তার দুই নামে একই ওষুধ লিখলে বাড়িতে কেউ টেরও পায় না।'}
-        </p>
-        <motion.button whileTap={{ scale: 0.97 }} transition={{ duration: 0.1 }} onClick={onStart} disabled={starting}
-          className="mt-8 w-full rounded-2xl bg-rx py-4 text-[20px] font-semibold text-white shadow-[0_10px_30px_-10px_rgba(11,93,75,0.6)] disabled:opacity-60 sm:w-auto sm:px-12">
-          মিলিয়ে দেখা শুরু করুন
-        </motion.button>
+    <motion.main className="mx-auto max-w-2xl px-5 pb-12 pt-8 lg:pt-14" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 12 }} transition={spring}>
+      <h1 className="display whitespace-pre-line text-[2.3rem] text-ink sm:text-[3rem]">{t('welcome.title')}</h1>
+      <p className="mt-4 text-[1.05rem] text-muted">
+        {lead ? t('welcome.lead', { ingredient: lead.ingredient, n: bnInt(lead.brand_count) }) : t('welcome.lead_plain')}
+      </p>
+      <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+        <Press onClick={onStart} disabled={busy}
+          className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-rx px-8 text-[1.1rem] font-semibold text-white shadow-[0_10px_30px_-10px_rgba(11,93,75,0.6)] disabled:opacity-60">
+          {busy && <Loader2 size={20} className="animate-spin" />}{t('welcome.start')}
+        </Press>
+        <Press onClick={onSample} disabled={busy} className="min-h-14 rounded-2xl bg-white px-6 text-[1rem] font-semibold text-rx ring-1 ring-foil disabled:opacity-60">
+          {t('welcome.sample')}
+        </Press>
+      </div>
+      <p className="mt-4 text-[0.95rem] text-muted">{t('welcome.how')}</p>
 
-        <ol className="mt-10 space-y-4">
-          {[
-            [<Camera key="c" size={20} />, 'প্রেসক্রিপশন বা ওষুধের স্ট্রিপের ছবি দিন, নাম বলুন বা লিখুন'],
-            [<ScanSearch key="s" size={20} />, stats ? `প্রতিটি নাম মেলানো হয় নিবন্ধিত ${bnInt(stats.products)}টি ওষুধের তালিকার সাথে` : 'প্রতিটি নাম মেলানো হয় নিবন্ধিত ওষুধের তালিকার সাথে'],
-            [<MessageCircle key="m" size={20} />, 'ফল আসে বাংলায়: লেখা, কণ্ঠ আর একটি ছবি কার্ড'],
-          ].map(([icon, text], k) => (
-            <li key={k} className="flex items-center gap-4">
-              <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-rx-soft text-rx">
-                {icon}
-                <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-rx text-[12px] font-semibold text-white">{bn(k + 1)}</span>
-              </span>
-              <span className="text-[18px]">{text}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-8 max-w-[34rem] text-[15px] text-muted">এটি ডাক্তারের পরামর্শের বিকল্প নয়। প্রতিটি সতর্কবার্তা ডাক্তার বা ফার্মাসিস্টকে দেখান।</p>
-      </section>
-
-      <section aria-label="উদাহরণ" className="sheet lift relative overflow-hidden px-5 py-7 sm:px-8 lg:py-10">
-        <div className="relative">
-          <p className="print text-[15px] font-semibold text-rx">℞ দুই প্রেসক্রিপশন, দুই নাম</p>
-          {/* faint pad rule lines only where the names are written */}
-          <div className="mt-4 min-h-[150px] rounded-xl bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_37px,rgba(36,64,142,0.08)_37px,rgba(36,64,142,0.08)_38px)] py-3">
-            {ex ? <SameMedicine key={ex.ingredient} a={ex.brands[0]} b={ex.brands[1]} ingredient={ex.ingredient} ink caption="একই ওষুধ" />
-              : <div className="h-[150px] animate-pulse rounded-2xl bg-paper" />}
-          </div>
-          <div className="mt-6 border-t border-foil pt-4">
-            {ex && <p className="text-[16px] text-muted">নিবন্ধিত তালিকায় <span className="print font-semibold text-ink">{ex.ingredient}</span> আছে {bnInt(ex.brand_count)}টি ব্র্যান্ড নামে, যেমন <span className="print text-ink">{ex.brands.slice(2, 5).join(', ')}</span>।</p>}
-            {examples.length > 1 && (
-              <div className="mt-4 flex gap-1.5" role="tablist" aria-label="উদাহরণ বদলান">
-                {examples.map((e, k) => (
-                  <button key={e.ingredient} role="tab" aria-selected={k === i % examples.length} aria-label={e.ingredient} onClick={() => setI(k)}
-                    className={`h-2 rounded-full transition-all ${k === i % examples.length ? 'w-6 bg-rx' : 'w-2 bg-foil'}`} />
-                ))}
-              </div>
-            )}
-          </div>
-          {stats?.eval && (
-            <p className="mt-5 flex items-start gap-2 rounded-xl bg-rx-soft px-3 py-2.5 text-[15px] text-rx-deep">
-              <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-              <span>বাংলাদেশি ডাক্তারদের হাতে লেখা {bnInt(stats.eval.n_test)}টি ওষুধের নামে পরীক্ষা: সঠিক মিল {bnPct(stats.eval.top1)}। নিশ্চিত না হলে অ্যাপ নিজে না ধরে আপনাকে জিজ্ঞেস করে।</span>
-            </p>
-          )}
+      <section aria-label={t('welcome.example_head')} className="sheet lift mt-10 px-5 py-6 sm:px-7">
+        <p className="print text-[0.95rem] font-semibold text-rx">℞ {t('welcome.example_head')}</p>
+        <div className="mt-4 min-h-[190px] rounded-xl bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_37px,rgba(36,64,142,0.08)_37px,rgba(36,64,142,0.08)_38px)] px-2 py-3">
+          {ex ? (
+            <Converge key={ex.ingredient} ingredient={ex.ingredient}
+              left={<span className="hand truncate text-[1.7rem] leading-none" title={ex.brands[0]}>{ex.brands[0]}</span>}
+              right={<span className="hand truncate text-[1.7rem] leading-none" title={ex.brands[1]}>{ex.brands[1]}</span>} />
+          ) : <div className="grid h-[170px] place-items-center"><Loader2 className="animate-spin text-rx" /></div>}
         </div>
+        {ex && (
+          <div className="mt-4 flex items-center gap-3 border-t border-foil pt-4">
+            <p className="min-w-0 flex-1 text-[0.95rem] text-muted">
+              {t('welcome.example_caption', { ingredient: ex.ingredient, n: bnInt(ex.brand_count), more: ex.brands.slice(2, 5).join(', ') })}
+            </p>
+            <div className="flex shrink-0 gap-1">
+              <Press onClick={() => setI((x) => x - 1)} aria-label={t('welcome.example_prev')} className="grid h-11 w-11 place-items-center rounded-full bg-paper"><ChevronLeft size={20} /></Press>
+              <Press onClick={() => setI((x) => x + 1)} aria-label={t('welcome.example_next')} className="grid h-11 w-11 place-items-center rounded-full bg-paper"><ChevronRight size={20} /></Press>
+            </div>
+          </div>
+        )}
+        {stats?.eval && <p className="mt-4 text-[0.95rem] text-rx-deep">{t('welcome.tested', { n: bnInt(stats.eval.n_test) })} ({bnPct(stats.eval.top1)})</p>}
       </section>
+
+      <footer className="mt-8 text-[0.9rem] text-muted">
+        <p>{t('app.disclaimer')}</p>
+        <p className="mt-1 font-semibold">{t('app.team')}</p>
+      </footer>
     </motion.main>
   )
 }

@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp } from 'lucide-react'
+import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
 import { Recorder } from './Recorder'
-import { api, bn, bnInt, shrink, type ItemView, type Stats } from './api'
-import { spring } from './Shell'
+import { ApiError, api, bn, bnInt, shrink, type Health, type ItemView, type Option, type Stats, type Taking } from './api'
+import { useCopy, t as tt } from './copy'
+import { Press, aiReady, spring } from './Shell'
 
-type Busy = { kind: 'image' | 'voice' | 'text'; label: string; preview?: string } | null
+type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string } | null
+type Pending = { item: ItemView; index: number; timer: number } | null
 
-const GROUP: Record<string, string> = { rx: 'প্রেসক্রিপশন', strip: 'স্ট্রিপ বা বাক্সের ছবি', text: 'লিখে দেওয়া নাম', voice: 'মুখে বলা নাম' }
-const SAID: Record<string, string> = { rx: 'লেখা আছে', strip: 'লেখা আছে', voice: 'শোনা গেছে', text: 'লিখেছেন' }
+function errorText(e: unknown, kind: 'image' | 'voice' | 'text'): string {
+  if (e instanceof ApiError) {
+    if (e.status === 415) return kind === 'image' ? tt('err.not_photo') : tt('err.generic')
+    if (e.status === 502) return tt('err.ai_off')
+    if (e.status === 404) return tt('err.expired')
+    return tt('err.generic')
+  }
+  return tt('err.server_down')
+}
 
-export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats }: {
-  caseId: string; items: ItemView[]; setItems: (f: (prev: ItemView[]) => ItemView[]) => void; onCheck: () => void; checking: boolean; stats: Stats | null
+export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, health, sample }: {
+  caseId: string; items: ItemView[]; setItems: (f: (prev: ItemView[]) => ItemView[]) => void; onCheck: () => void
+  checking: boolean; stats: Stats | null; health: Health | null; sample: boolean
 }) {
+  const t = useCopy()
   const rxInput = useRef<HTMLInputElement>(null)
   const stripInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<Busy>(null)
@@ -21,271 +32,356 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats }
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
   const [heard, setHeard] = useState<string[]>([])
+  const [repeat, setRepeat] = useState<Blob | null>(null)
+  const [pending, setPending] = useState<Pending>(null)
+  const ready = aiReady(health)
+
+  // Remove with undo: the line disappears at once; the server forgets it after 5 s unless the person taps undo.
+  const flushRemove = useCallback(async (p: Pending) => {
+    if (!p) return
+    window.clearTimeout(p.timer)
+    try { await api.remove(caseId, p.item.item_id) } catch { /* already gone */ }
+  }, [caseId])
+  function remove(it: ItemView) {
+    if (pending) flushRemove(pending)
+    const index = items.findIndex((x) => x.item_id === it.item_id)
+    setItems((prev) => prev.filter((x) => x.item_id !== it.item_id))
+    const timer = window.setTimeout(() => { flushRemove({ item: it, index, timer: 0 }); setPending(null) }, 5000)
+    setPending({ item: it, index, timer })
+  }
+  function undo() {
+    if (!pending) return
+    window.clearTimeout(pending.timer)
+    const p = pending
+    setItems((prev) => { const next = [...prev]; next.splice(Math.min(p.index, next.length), 0, p.item); return next })
+    setPending(null)
+  }
+  async function check() {
+    if (pending) { await flushRemove(pending); setPending(null) }
+    onCheck()
+  }
 
   const onVoice = useCallback(async (audio: Blob) => {
     setRecording(false)
     setError(null)
-    setBusy({ kind: 'voice', label: 'কথা শোনা হচ্ছে' })
+    setBusy({ kind: 'voice' })
     try {
       const res = await api.addVoice(caseId, audio)
       setHeard((h) => [...h, res.transcript])
       setItems((prev) => [...prev, ...res.items])
-      if (!res.items.length) setError('কোনো ওষুধের নাম শোনা যায়নি। আরেকবার ধীরে বলুন, বা নাম লিখে দিন।')
-    } catch (e) {
-      setError(`কথাটি শোনা যায়নি (${(e as Error).message})। আবার বলুন, বা নাম লিখে দিন।`)
-    }
+      if (!res.items.length) setError(tt('err.no_items_voice'))
+    } catch (e) { setError(errorText(e, 'voice')) }
     setBusy(null)
   }, [caseId, setItems])
 
-  async function onFiles(files: FileList | null, label: string) {
-    if (!files?.length) return
+  async function addPhoto(blob: Blob, allowRepeat = false) {
+    const res = await api.addImage(caseId, blob, allowRepeat)
+    if (res.duplicate_of) { setRepeat(blob); return }
+    setItems((prev) => [...prev, ...res.items])
+    if (!res.items.length) setError(tt('err.no_items_photo'))
+  }
+
+  async function onFiles(files: FileList | null) {
+    if (!files?.length || busy) return
     setError(null)
+    setRepeat(null)
     for (const f of Array.from(files)) {
       const preview = URL.createObjectURL(f)
-      setBusy({ kind: 'image', label, preview })
-      try {
-        const res = await api.addImage(caseId, await shrink(f))
-        setItems((prev) => [...prev, ...res.items])
-        if (!res.items.length) setError('ছবিতে কোনো ওষুধের নাম পাওয়া যায়নি। আরেকটু কাছ থেকে, আলোতে তুলে আবার দিন।')
-      } catch (e) {
-        setError(`ছবিটি পড়া যায়নি (${(e as Error).message})। আবার চেষ্টা করুন।`)
-      }
+      setBusy({ kind: 'image', preview })
+      try { await addPhoto(await shrink(f)) } catch (e) { setError(errorText(e, 'image')) }
       URL.revokeObjectURL(preview)
     }
     setBusy(null)
   }
 
-  async function onText() {
-    if (!text.trim()) return
-    setError(null)
-    setBusy({ kind: 'text', label: 'নামগুলো মেলানো হচ্ছে' })
-    try {
-      const res = await api.addText(caseId, text)
-      setItems((prev) => [...prev, ...res.items])
-      setText('')
-      setTyping(false)
-    } catch (e) {
-      setError(`নামগুলো যোগ করা যায়নি (${(e as Error).message})।`)
-    }
+  async function addRepeat() {
+    if (!repeat) return
+    const blob = repeat
+    setRepeat(null)
+    setBusy({ kind: 'image' })
+    try { await addPhoto(blob, true) } catch (e) { setError(errorText(e, 'image')) }
     setBusy(null)
   }
 
-  async function choose(it: ItemView, product_id: number | null) {
-    const updated = await api.confirm(caseId, it.item_id, product_id, it.per_day)
-    setItems((prev) => prev.map((x) => (x.item_id === it.item_id ? updated : x)))
+  async function onText() {
+    if (!text.trim() || busy) return
+    setError(null)
+    setBusy({ kind: 'text' })
+    try {
+      const res = await api.addText(caseId, text)
+      setItems((prev) => [...prev, ...res.items])
+      if (!res.items.length) setError(tt('err.no_items_text'))
+      else { setText(''); setTyping(false) }
+    } catch (e) { setError(errorText(e, 'text')) }
+    setBusy(null)
   }
 
+  const update = (v: ItemView) => setItems((prev) => prev.map((x) => (x.item_id === v.item_id ? v : x)))
   const unconfirmed = items.filter((i) => i.needs_confirm).length
-  const groups = groupByDoc(items)
-  const checkButton = (
-    <motion.button whileTap={{ scale: 0.97 }} disabled={!items.length || !!busy || checking} onClick={onCheck}
-      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-4 text-[19px] font-semibold text-white disabled:opacity-40">
-      {checking ? <Loader2 size={20} className="animate-spin" /> : null}
-      মিলিয়ে দেখুন{items.length ? ` (${bn(items.length)}টি ওষুধ)` : ''}
-    </motion.button>
-  )
+  const others = (it: ItemView) => items.some((x) => x.item_id !== it.item_id && x.chosen)
 
   return (
-    <motion.main className="mx-auto grid max-w-6xl gap-6 px-4 pb-40 pt-6 lg:grid-cols-[400px_minmax(0,1fr)] lg:gap-10 lg:px-8 lg:pb-16 lg:pt-10"
-      initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={spring}>
-      {/* left: how to add */}
-      <section className="lg:sticky lg:top-24 lg:self-start">
-        <h2 className="display text-[1.9rem] lg:text-[2.2rem]">ওষুধগুলো যোগ করুন</h2>
-        <p className="mt-1 text-muted">এক বা একাধিক ডাক্তারের প্রেসক্রিপশন, বাড়িতে থাকা ওষুধের স্ট্রিপ, অথবা নাম বলে বা লিখে দিন।</p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <Tile icon={<FileText />} label="প্রেসক্রিপশন" hint="ছবি" onClick={() => rxInput.current?.click()} />
-          <Tile icon={<Camera />} label="স্ট্রিপ / বাক্স" hint="ছবি" onClick={() => stripInput.current?.click()} />
-          <Tile icon={<Mic />} label="বলুন" hint="বাংলায়" onClick={() => setRecording(true)} />
-          <Tile icon={<Keyboard />} label="লিখে দিন" hint="নাম" active={typing} onClick={() => setTyping((v) => !v)} />
-        </div>
-        <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files, 'প্রেসক্রিপশন পড়া হচ্ছে'); e.target.value = '' }} />
-        <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files, 'স্ট্রিপ পড়া হচ্ছে'); e.target.value = '' }} />
-        <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
+    <motion.main className="mx-auto max-w-2xl px-4 pb-44 pt-6 lg:pt-10" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -24 }} transition={spring}>
+      {sample && <p className="mb-4 rounded-xl bg-rx-soft px-4 py-3 text-[0.95rem] text-rx-deep"><span className="font-bold">{t('sample.badge')}: </span>{t('sample.note')}</p>}
+      <h2 className="display text-[1.9rem]">{t('case.title')}</h2>
+      <p className="mt-1 text-muted">{t('case.sub')}</p>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || !ready} onClick={() => rxInput.current?.click()} />
+        <Tile icon={<Camera />} label={t('tile.strip')} hint={t('tile.strip_hint')} disabled={!!busy || !ready} onClick={() => stripInput.current?.click()} />
+        <Tile icon={<Mic />} label={t('tile.voice')} hint={t('tile.voice_hint')} disabled={!!busy || !ready} onClick={() => setRecording(true)} />
+        <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => setTyping((v) => !v)} />
+      </div>
+      {!ready && health && <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-[0.95rem] text-warn"><AlertCircle size={18} className="mt-0.5 shrink-0" />{t('err.ai_off')}</p>}
+      <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
+      <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
+      <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {typing && (
+          <motion.div className="sheet mt-3 overflow-hidden p-3" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={spring}>
+            <label htmlFor="typed" className="text-[0.95rem] text-muted">{t('typed.label')}</label>
+            <textarea id="typed" value={text} onChange={(e) => setText(e.target.value)} rows={4} autoFocus placeholder={t('typed.placeholder')}
+              className="print mt-1 w-full resize-none rounded-xl bg-paper p-3 text-[1.05rem] outline-none focus:ring-2 focus:ring-rx/40" />
+            <Press onClick={onText} disabled={!text.trim() || !!busy} className="mt-2 min-h-12 w-full rounded-xl bg-rx font-semibold text-white disabled:opacity-40">{t('typed.add')}</Press>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div aria-live="polite" aria-atomic="false">
+        {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl bg-danger-soft p-3 text-[1rem] text-danger"><AlertCircle className="mt-1 shrink-0" size={18} />{error}</p>}
+        <AnimatePresence>{busy && <Working busy={busy} products={stats?.products} />}</AnimatePresence>
         <AnimatePresence>
-          {typing && (
-            <motion.div className="sheet mt-3 overflow-hidden p-3" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={spring}>
-              <label htmlFor="typed" className="text-[15px] text-muted">প্রতি লাইনে একটি ওষুধ, চাইলে মাত্রা আর কখন খান</label>
-              <textarea id="typed" value={text} onChange={(e) => setText(e.target.value)} rows={4} autoFocus placeholder={'Napa 500 1+0+1\nSeclo 20 রাতে'}
-                className="print mt-1 w-full resize-none rounded-xl bg-paper p-3 text-[18px] outline-none focus:ring-2 focus:ring-rx/40" />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={onText} disabled={!text.trim() || !!busy} className="mt-2 w-full rounded-xl bg-rx py-3 font-semibold text-white disabled:opacity-40">তালিকায় যোগ করুন</motion.button>
+          {repeat && (
+            <motion.div className="sheet mt-4 p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+              <p className="font-semibold">{t('dupdoc.title')}</p>
+              <p className="mt-1 text-[0.95rem] text-muted">{t('dupdoc.hint')}</p>
+              <Press onClick={addRepeat} className="mt-3 min-h-11 rounded-xl bg-paper px-4 text-[0.95rem] font-semibold ring-1 ring-foil">{t('dupdoc.add_anyway')}</Press>
             </motion.div>
           )}
         </AnimatePresence>
-        {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl bg-danger-soft p-3 text-[16px] text-danger"><AlertCircle className="mt-1 shrink-0" size={18} />{error}</p>}
-        <div className="mt-6 hidden lg:block">
-          {unconfirmed > 0 && <p className="mb-2 whitespace-nowrap text-center text-[15px] font-semibold text-warn">{bn(unconfirmed)}টি ওষুধ নিশ্চিত করা বাকি</p>}
-          {checkButton}
-        </div>
-      </section>
+      </div>
 
-      {/* right: what we found */}
-      <section aria-live="polite" className="min-w-0">
-        <AnimatePresence>{busy && <Working busy={busy} products={stats?.products} />}</AnimatePresence>
-        {heard.map((h, k) => (
-          <motion.p key={k} className="mb-4 flex gap-2 rounded-2xl bg-white p-3 text-[16px] ring-1 ring-foil" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <Quote size={16} className="mt-1 shrink-0 text-pen" /><span><span className="text-muted">শুনেছি: </span><span className="text-pen">{h}</span></span>
-          </motion.p>
-        ))}
-        {!items.length && !busy && <Empty />}
-        <div className="space-y-6">
-          {groups.map((g) => (
-            <motion.div key={g.key} layout transition={spring}>
-              <p className="mb-2 flex items-baseline gap-2 px-1 text-[15px] font-semibold text-muted">
-                {GROUP[g.source] ?? 'ওষুধ'}{g.doctor && g.source === 'rx' && !/^D\d+$/.test(g.doctor) ? <span className="font-normal">({g.doctor})</span> : null}
-              </p>
-              <ul className="sheet divide-y divide-foil overflow-hidden">
-                <AnimatePresence initial={false}>
-                  {g.items.map((it, k) => (
-                    <motion.li key={it.item_id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: Math.min(k, 6) * 0.05 }}>
-                      <ItemRow caseId={caseId} it={it} onChoose={(pid) => choose(it, pid)}
-                        onResolve={async () => { const v = await api.resolve(caseId, it.item_id); setItems((prev) => prev.map((x) => (x.item_id === it.item_id ? v : x))) }} />
-                    </motion.li>
-                  ))}
-                </AnimatePresence>
-              </ul>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+      {heard.map((h, k) => (
+        <p key={k} className="mt-4 flex gap-2 rounded-2xl bg-white p-3 text-[1rem] ring-1 ring-foil">
+          <Quote size={16} className="mt-1 shrink-0 text-pen" /><span><span className="text-muted">{t('heard')}: </span><span className="text-pen">{h}</span></span>
+        </p>
+      ))}
 
-      {/* phone: the action stays under the thumb */}
-      <div className="glass-strong fixed inset-x-0 bottom-0 z-20 border-t border-foil px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 lg:hidden">
-        <div className="mx-auto max-w-xl">
-          {unconfirmed > 0 && <p className="mb-2 whitespace-nowrap text-center text-[15px] font-semibold text-warn">{bn(unconfirmed)}টি ওষুধ নিশ্চিত করা বাকি</p>}
-          {checkButton}
+      {!items.length && !busy ? <Empty /> : (
+        <ul className="mt-6 space-y-4">
+          <AnimatePresence initial={false}>
+            {items.map((it) => (
+              <motion.li key={it.item_id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, marginTop: 0 }} transition={spring}>
+                <MedicineCard caseId={caseId} it={it} onUpdate={update} onRemove={() => remove(it)} canResolve={others(it)} />
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </ul>
+      )}
+
+      <AnimatePresence>
+        {pending && (
+          <motion.div role="status" className="fixed inset-x-4 bottom-32 z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl bg-ink px-4 py-3 text-white shadow-lg"
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={spring}>
+            <span className="min-w-0 truncate">{t('item.removed', { brand: pending.item.chosen?.brand ?? pending.item.reading })}</span>
+            <Press onClick={undo} className="min-h-11 shrink-0 rounded-xl px-3 font-semibold text-[#9fd3c2]">{t('item.undo')}</Press>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="glass-strong fixed inset-x-0 bottom-0 z-20 border-t border-foil px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
+        <div className="mx-auto max-w-2xl">
+          <p className={`mb-2 h-6 whitespace-nowrap text-center text-[0.95rem] font-semibold text-warn ${unconfirmed ? '' : 'invisible'}`}>{t('check.pending', { n: bn(unconfirmed) })}</p>
+          <Press onClick={check} disabled={!items.length || !!busy || checking}
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-[1.15rem] font-semibold text-white disabled:opacity-40">
+            {checking && <Loader2 size={20} className="animate-spin" />}
+            {t('check.button')}{items.length ? ` (${t('check.count', { n: bn(items.length) })})` : ''}
+          </Press>
         </div>
       </div>
-      {stats && <p className="sr-only">নিবন্ধিত ওষুধ {bnInt(stats.products)}টি</p>}
     </motion.main>
   )
 }
 
-function groupByDoc(items: ItemView[]) {
-  const out: { key: string; source: string; doctor: string | null; items: ItemView[] }[] = []
-  for (const it of items) {
-    const key = it.source === 'rx' || it.source === 'strip' ? it.doc_id : it.source
-    let g = out.find((x) => x.key === key)
-    if (!g) { g = { key, source: it.source, doctor: it.doctor, items: [] }; out.push(g) }
-    g.items.push(it)
-  }
-  return out
-}
-
 function Empty() {
+  const t = useCopy()
   return (
-    <div className="grid place-items-center rounded-[20px] border-2 border-dashed border-foil px-6 py-14 text-center">
-      <FileText className="text-foil" size={44} />
-      <p className="mt-3 text-[18px] font-semibold">এখনো কোনো ওষুধ যোগ হয়নি</p>
-      <p className="mt-1 max-w-sm text-muted">বাঁ দিক থেকে একটি প্রেসক্রিপশনের ছবি দিন, অথবা নাম লিখে বা বলে দিন। ওষুধগুলো এখানে একে একে দেখা যাবে।</p>
+    <div className="mt-6 grid place-items-center rounded-[20px] border-2 border-dashed border-foil px-6 py-12 text-center">
+      <FileText className="text-muted/40" size={44} />
+      <p className="mt-3 text-[1.05rem] font-semibold">{t('empty.title')}</p>
+      <p className="mt-1 max-w-sm text-muted">{t('empty.hint')}</p>
     </div>
   )
 }
 
-// While a photo is being read: the photo itself, with a scan line passing over it.
+// While a photo is read: the photo itself, with a scan line passing over it (static under reduced motion).
 function Working({ busy, products }: { busy: NonNullable<Busy>; products?: number }) {
+  const t = useCopy()
   const reduce = useReducedMotion()
+  const title = busy.kind === 'image' ? t('working.image') : busy.kind === 'voice' ? t('working.voice') : t('working.text')
+  const hint = busy.kind === 'image' ? t('working.image_hint', { n: products ? bnInt(products) : '' }) : busy.kind === 'voice' ? t('working.voice_hint') : ''
   return (
-    <motion.div className="sheet lift mb-6 flex items-center gap-4 overflow-hidden p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} transition={spring}>
+    <motion.div className="sheet lift mt-4 flex items-center gap-4 overflow-hidden p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
       {busy.preview ? (
         <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-xl bg-paper">
           <img src={busy.preview} alt="" className="h-full w-full object-cover" />
           {!reduce && <motion.div aria-hidden className="absolute inset-x-0 h-10 bg-gradient-to-b from-transparent via-rx/35 to-transparent"
             initial={{ y: '-40%' }} animate={{ y: '260%' }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', repeatType: 'reverse' }} />}
         </div>
-      ) : <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-rx-soft text-rx"><Loader2 className="animate-spin" /></div>}
-      <div>
-        <p className="text-[18px] font-semibold">{busy.label}…</p>
-        <p className="text-[15px] text-muted">
-          {busy.kind === 'image' ? `AI প্রতিটি লাইন পড়ছে, তারপর নিবন্ধিত ${products ? bnInt(products) + 'টি ' : ''}ওষুধের তালিকা থেকে আসল ওষুধটি বেছে নেওয়া হবে।`
-            : busy.kind === 'voice' ? 'কথা লেখায় আনা হচ্ছে, তারপর ওষুধের নামগুলো তালিকার সাথে মেলানো হবে।' : 'নামগুলো নিবন্ধিত তালিকার সাথে মেলানো হচ্ছে।'}
-        </p>
-      </div>
+      ) : <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-rx-soft text-rx"><Loader2 className="animate-spin" aria-hidden /></div>}
+      <div><p className="text-[1.05rem] font-semibold">{title}</p>{hint && <p className="text-[0.95rem] text-muted">{hint}</p>}</div>
     </motion.div>
   )
 }
 
-function Tile({ icon, label, hint, onClick, active }: { icon: React.ReactNode; label: string; hint: string; onClick: () => void; active?: boolean }) {
+function Tile({ icon, label, hint, onClick, active, disabled }: { icon: React.ReactNode; label: string; hint: string; onClick: () => void; active?: boolean; disabled?: boolean }) {
   return (
-    <motion.button whileTap={{ scale: 0.96 }} transition={{ duration: 0.1 }} onClick={onClick}
-      className={`flex items-center gap-3 rounded-2xl bg-white px-3 py-3.5 text-left ring-1 ${active ? 'ring-2 ring-rx' : 'ring-foil'} hover:ring-rx/50`}>
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-rx-soft text-rx">{icon}</span>
-      <span className="leading-tight"><span className="block whitespace-nowrap text-[17px] font-semibold">{label}</span><span className="text-[14px] text-muted">{hint}</span></span>
-    </motion.button>
+    <Press onClick={onClick} disabled={disabled} aria-pressed={active}
+      className={`flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-2xl bg-white px-2 py-3 text-center ring-1 disabled:opacity-40 ${active ? 'ring-2 ring-rx' : 'ring-foil'}`}>
+      <span className="grid h-11 w-11 place-items-center rounded-full bg-rx-soft text-rx">{icon}</span>
+      <span className="leading-tight"><span className="block text-[1rem] font-semibold">{label}</span><span className="text-[0.85rem] text-muted">{hint}</span></span>
+    </Press>
   )
 }
 
-function Status({ it }: { it: ItemView }) {
-  if (!it.chosen && !it.needs_confirm) return <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-[14px] font-semibold text-danger"><CircleHelp size={14} />পাওয়া যায়নি</span>
-  if (it.needs_confirm) return <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[14px] font-semibold text-warn"><CircleHelp size={14} />নিশ্চিত করুন</span>
-  return <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-rx-soft px-2.5 py-1 text-[14px] font-semibold text-rx"><Check size={14} strokeWidth={3} />মিলেছে</span>
+function StatusChips({ value, onChange, busy }: { value: Taking; onChange: (v: Taking) => void; busy: boolean }) {
+  const t = useCopy()
+  const opts: Taking[] = ['current', 'stopped', 'unsure']
+  return (
+    <div className="mt-3">
+      <p id="status-label" className="mb-1.5 text-[0.95rem] text-muted">{t('status.label')}</p>
+      <div role="radiogroup" aria-labelledby="status-label" className="flex flex-wrap gap-2">
+        {opts.map((o) => (
+          <Press key={o} role="radio" aria-checked={value === o} disabled={busy} onClick={() => onChange(o)}
+            className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[0.95rem] font-semibold ring-1 ${value !== o ? 'bg-white text-ink ring-foil'
+              : o === 'current' ? 'bg-rx text-white ring-rx' : o === 'stopped' ? 'bg-ink text-white ring-ink' : 'bg-paper text-ink ring-2 ring-muted/50'}`}>
+            {value === o && <Check size={16} strokeWidth={3} aria-hidden />}{t(`status.${o}`)}
+          </Press>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-function ItemRow({ caseId, it, onChoose, onResolve }: { caseId: string; it: ItemView; onChoose: (pid: number | null) => void; onResolve: () => Promise<void> }) {
-  const [looking, setLooking] = useState(false)
+function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: string; it: ItemView; onUpdate: (v: ItemView) => void; onRemove: () => void; canResolve: boolean }) {
+  const t = useCopy()
   const [cropOk, setCropOk] = useState(true)
+  const [changing, setChanging] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
   useEffect(() => setCropOk(true), [it.item_id])
   const s = it.schedule
   const slots = s && [s.morning, s.noon, s.night].some((v) => v !== null) ? `${bn(s.morning ?? 0)}+${bn(s.noon ?? 0)}+${bn(s.night ?? 0)}` : null
-  const chips = [
-    slots ? `দিনে ${slots}` : s?.per_day ? `দিনে ${bn(s.per_day)} বার` : null,
-    s?.meal ? `খাবারের ${s.meal === 'after' ? 'পরে' : 'আগে'}` : null,
-    s?.days ? `${bn(s.days)} দিন` : null,
-  ].filter(Boolean) as string[]
+  const chips = [slots ? `দিনে ${slots}` : s?.per_day ? `দিনে ${bn(s.per_day)} বার` : null,
+    s?.meal ? `খাবারের ${s.meal === 'after' ? 'পরে' : 'আগে'}` : null, s?.days ? `${bn(s.days)} দিন` : null].filter(Boolean) as string[]
+  const ink = it.handwritten || it.source === 'voice'
+  const said = it.source === 'voice' ? t('item.read_voice') : it.source === 'text' ? t('item.read_text') : t('item.read_photo')
+  const where = it.source === 'rx' ? (it.doctor && !/^D\d+$/.test(it.doctor) ? t('item.from_doctor', { doctor: it.doctor }) : t('item.from_rx')) : t('item.from_bag')
+
+  async function run(fn: () => Promise<ItemView>) {
+    setSaving(true); setErr(null)
+    try { onUpdate(await fn()); setChanging(false) } catch { setErr(tt('err.generic')) }
+    setSaving(false)
+  }
+
   return (
-    <div className="p-4">
-      {it.has_crop && cropOk && (
-        <div className="mb-3 overflow-hidden rounded-lg bg-white ring-1 ring-foil">
-          <img src={api.cropUrl(caseId, it.item_id)} onError={() => setCropOk(false)} alt={`ছবির এই লাইনটি: ${it.reading}`} className="block max-h-16 w-auto max-w-full object-contain object-left" />
-        </div>
-      )}
-      <div className="flex items-start gap-4">
-        {!(it.has_crop && cropOk) && <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-paper text-muted">{it.source === 'voice' ? <Mic size={22} /> : <Keyboard size={22} />}</div>}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-[14px] text-muted">{SAID[it.source] ?? 'লেখা আছে'}{it.handwritten ? ' (হাতের লেখা)' : ''}</p>
-            <Status it={it} />
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className={`${it.handwritten || it.source === 'voice' ? 'hand text-[22px] text-pen' : 'print text-[19px] text-muted'} leading-tight`}>{it.reading || '—'}</span>
-            {it.chosen && (
-              <>
-                <ArrowRight size={18} className="shrink-0 text-muted" aria-label="মিলেছে" />
-                <span className="print text-[21px] font-semibold leading-tight">{it.chosen.brand} <span className="font-normal text-muted">{it.chosen.strength}</span></span>
-              </>
-            )}
-          </div>
-          {it.chosen && <p className="mt-0.5 text-[14px] text-muted">{it.chosen.form}{it.chosen.maker ? `, ${it.chosen.maker}` : ''}</p>}
-          {chips.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {chips.map((c, k) => <span key={c} className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[14px] ${k === 0 ? 'bg-rx-soft text-rx' : 'bg-paper text-muted'}`}>{c}</span>)}
-            </div>
-          )}
+    <article className="sheet p-4" aria-label={it.chosen?.brand ?? it.reading}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate rounded-full bg-paper px-3 py-1 text-[0.85rem] text-muted">{where}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {it.needs_confirm ? <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[0.85rem] font-semibold text-warn"><CircleHelp size={14} aria-hidden />{t('steps.confirm')}</span>
+            : it.chosen ? <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-rx-soft px-2.5 py-1 text-[0.85rem] font-semibold text-rx"><Check size={14} strokeWidth={3} aria-hidden />{t('item.matched')}</span>
+            : <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-[0.85rem] font-semibold text-danger"><CircleHelp size={14} aria-hidden />{t('item.not_found')}</span>}
+          <Press onClick={onRemove} aria-label={`${t('item.remove')}: ${it.chosen?.brand ?? it.reading}`} className="grid h-11 w-11 place-items-center rounded-full text-muted"><Trash2 size={18} /></Press>
         </div>
       </div>
-      {it.needs_confirm && (
-        <div className="mt-3 rounded-xl bg-warn-soft/60 p-3">
-          <p className="mb-2 text-[16px] font-semibold text-warn">{it.has_crop ? 'ছবির লেখার সাথে মিলিয়ে সঠিকটি বেছে নিন' : 'কোনটি বোঝাতে চেয়েছেন, বেছে নিন'}</p>
-          {it.agent?.reason_bn && (
-            <motion.p className="mb-2 flex gap-2 rounded-lg bg-white p-2.5 text-[16px]" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-              <Sparkles size={16} className="mt-1 shrink-0 text-rx" /><span>{it.agent.reason_bn}</span>
-            </motion.p>
+      {it.has_crop && cropOk && (
+        <div className="mt-3 flex h-16 items-center overflow-hidden rounded-lg bg-white ring-1 ring-foil">
+          <img src={api.cropUrl(caseId, it.item_id)} onError={() => setCropOk(false)} alt={`${said}: ${it.reading}`} className="block h-full w-auto max-w-full object-contain object-left" />
+        </div>
+      )}
+      <p className="mt-3 text-[0.9rem] text-muted">{said}{it.handwritten ? ` (${t('item.handwritten')})` : ''}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={`${ink ? 'hand text-[1.35rem]' : 'print text-[1.1rem] text-muted'} leading-tight`}>{it.reading || '—'}</span>
+        {it.chosen && <>
+          <ArrowRight size={18} className="shrink-0 text-muted" aria-hidden />
+          <span className="print text-[1.25rem] font-semibold leading-tight">{it.chosen.brand} <span className="font-normal text-muted">{it.chosen.strength}</span></span>
+        </>}
+      </div>
+      {it.chosen && <p className="mt-0.5 text-[0.9rem] text-muted">{it.chosen.form}{it.chosen.maker ? `, ${it.chosen.maker}` : ''}</p>}
+      {chips.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{chips.map((c) => <span key={c} className="whitespace-nowrap rounded-full bg-paper px-3 py-1 text-[0.9rem] text-ink ring-1 ring-foil">{c}</span>)}</div>}
+
+      {(it.needs_confirm || !it.chosen || changing) ? (
+        <Abstain caseId={caseId} it={it} saving={saving} canResolve={canResolve} onCancel={changing ? () => setChanging(false) : undefined}
+          onChoose={(pid) => run(() => api.confirm(caseId, it.item_id, pid, it.per_day))}
+          onResolve={() => run(() => api.resolve(caseId, it.item_id))} />
+      ) : <>
+        <StatusChips value={it.taking} busy={saving} onChange={(v) => run(() => api.status(caseId, it.item_id, v))} />
+        <Press onClick={() => setChanging(true)} className="mt-2 min-h-11 text-[0.95rem] font-semibold text-rx underline-offset-4 hover:underline">{t('item.change')}</Press>
+      </>}
+      {err && <p role="alert" className="mt-2 text-[0.95rem] text-danger">{err}</p>}
+    </article>
+  )
+}
+
+// When the matcher is not sure (or the person says "not right"): the photo line, the closest registered products,
+// a search over the whole registry, and an optional evidence search over the rest of the case.
+function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel }: {
+  caseId: string; it: ItemView; saving: boolean; canResolve: boolean
+  onChoose: (pid: number | null) => void; onResolve: () => void; onCancel?: () => void
+}) {
+  const t = useCopy()
+  const [searching, setSearching] = useState(false)
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<Option[] | null>(null)
+  const [looking, setLooking] = useState(false)
+  void caseId
+  useEffect(() => {
+    if (!searching || q.trim().length < 2) { setResults(null); return }
+    const h = window.setTimeout(() => { api.search(q).then((r) => setResults(r.options)).catch(() => setResults([])) }, 250)
+    return () => window.clearTimeout(h)
+  }, [q, searching])
+  const suggested = it.agent?.product_id
+  const option = (o: Option) => (
+    <Press key={o.product_id} disabled={saving} onClick={() => onChoose(o.product_id)} aria-pressed={suggested === o.product_id}
+      className={`print flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 text-left ring-1 ${suggested === o.product_id ? 'bg-rx-soft ring-2 ring-rx' : 'bg-white ring-foil'}`}>
+      <span className="min-w-0"><span className="text-[1.1rem] font-semibold">{o.brand}</span> <span className="text-muted">{o.strength}</span>
+        <span className="block truncate text-[0.85rem] text-muted">{o.form}{o.maker ? `, ${o.maker}` : ''}</span></span>
+      {suggested === o.product_id && <span className="shrink-0 rounded-full bg-rx px-2 py-0.5 text-[0.8rem] font-semibold text-white">{t('abstain.suggested')}</span>}
+    </Press>
+  )
+  return (
+    <div className="mt-4 rounded-2xl bg-warn-soft/70 p-3">
+      {it.needs_confirm && <p className="flex items-center gap-2 text-[1.05rem] font-bold text-warn"><CircleHelp size={18} aria-hidden />{t('abstain.title')}</p>}
+      <p className="mb-3 mt-1 text-[0.95rem] text-ink">{it.has_crop ? t('abstain.photo') : t('abstain.other')}</p>
+      {it.agent?.reason_bn && (
+        <p className="mb-3 flex gap-2 rounded-xl bg-white p-3 text-[1rem]"><Sparkles size={16} className="mt-1 shrink-0 text-rx" aria-hidden />
+          <span><span className="font-semibold">{t('abstain.suggested')}: </span>{it.agent.reason_bn}</span></p>
+      )}
+      {it.agent && !it.agent.product_id && <p className="mb-3 text-[0.95rem] text-muted">{t('abstain.no_clue')}</p>}
+      <div className="space-y-2">{it.options.map(option)}</div>
+      {!searching ? (
+        <div className="mt-3 flex flex-wrap gap-x-4">
+          <Press onClick={() => setSearching(true)} className="flex min-h-11 items-center gap-1.5 text-[0.95rem] font-semibold text-rx"><Search size={16} aria-hidden />{t('abstain.none')}</Press>
+          {canResolve && !it.agent && (
+            <Press disabled={looking} onClick={async () => { setLooking(true); try { await onResolve() } finally { setLooking(false) } }}
+              className="flex min-h-11 items-center gap-1.5 text-[0.95rem] font-semibold text-rx disabled:opacity-60" title={t('abstain.clues_hint')}>
+              {looking ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Sparkles size={16} aria-hidden />}{t('abstain.clues')}
+            </Press>
           )}
-          {it.agent && !it.agent.product_id && <p className="mb-2 text-[15px] text-muted">কেসের অন্য ওষুধে কোনো সূত্র পাওয়া যায়নি; নিজে মিলিয়ে বেছে নিন।</p>}
-          <div className="flex flex-wrap gap-2">
-            {it.options.map((o) => (
-              <motion.button key={o.product_id} whileTap={{ scale: 0.95 }} onClick={() => onChoose(o.product_id)}
-                className={`print rounded-full px-3.5 py-2 text-[17px] font-semibold ring-1 ${it.agent?.product_id === o.product_id ? 'bg-rx text-white ring-rx' : 'bg-white ring-foil hover:ring-rx/50'}`}>
-                {o.brand} <span className={`font-normal ${it.agent?.product_id === o.product_id ? 'text-white/80' : 'text-muted'}`}>{o.strength}</span>
-              </motion.button>
-            ))}
-            <motion.button whileTap={{ scale: 0.95 }} onClick={() => onChoose(null)} className="rounded-full px-3 py-2 text-[16px] text-muted underline">কোনোটিই না</motion.button>
+          {onCancel && <Press onClick={onCancel} className="min-h-11 text-[0.95rem] text-muted">{t('app.close')}</Press>}
+        </div>
+      ) : (
+        <div className="mt-3">
+          <label htmlFor={`s-${it.item_id}`} className="text-[0.95rem] text-muted">{t('abstain.search_label')}</label>
+          <input id={`s-${it.item_id}`} autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+            className="print mt-1 min-h-12 w-full rounded-xl bg-white px-3 text-[1.05rem] ring-1 ring-foil outline-none focus:ring-2 focus:ring-rx/50" />
+          <div className="mt-2 space-y-2">
+            {results?.map(option)}
+            {results && !results.length && <p className="text-[0.95rem] text-muted">{t('abstain.no_results')}</p>}
           </div>
-          {!it.agent && (
-            <motion.button whileTap={{ scale: 0.97 }} disabled={looking} onClick={async () => { setLooking(true); try { await onResolve() } finally { setLooking(false) } }}
-              className="mt-3 flex items-center gap-1.5 text-[16px] font-semibold text-rx disabled:opacity-60">
-              {looking ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} সূত্র খুঁজুন: কেসের অন্য ওষুধের সাথে মিলিয়ে দেখুক
-            </motion.button>
-          )}
         </div>
       )}
     </div>
