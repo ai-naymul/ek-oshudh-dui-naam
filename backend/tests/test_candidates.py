@@ -48,3 +48,10 @@ def test_fast_enough(idx):
     for _ in range(50):
         idx.search("Tab. Seclo 20", 20)
     assert (time.time() - t) / 50 < 0.05
+
+
+@pytest.mark.parametrize("reading,brand,strength", [("Ace 500 1+0+1", "Ace", "500"), ("Napa 500 ১+১+১ ৫ দিন", "Napa", "500"),
+                                                     ("Tab. Fexo 120 0+0+1 x 10 days", "Fexo", "120"), ("Seclo 20mg", "Seclo", "20")])
+def test_schedule_numbers_are_not_read_as_strength(idx, reading, brand, strength):
+    top = idx.search(reading, 20)[0]
+    assert top.brand == brand and strength in top.strength and top.form.startswith(("Tablet", "Capsule"))

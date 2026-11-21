@@ -56,14 +56,14 @@ def _resize(data: bytes, max_side: int = 1600) -> tuple[bytes, tuple[int, int]]:
     return buf.getvalue(), img.size
 
 
-def crop(data: bytes, box: list[int] | None, pad: float = 0.04) -> bytes | None:
+def crop(data: bytes, box: list[int] | None, pad: float = 0.04, pad_x: float = 0.09) -> bytes | None:
     """Cut the region of one line (box on the 0-1000 scale) for the confirm screen and the R3 reranker."""
     if not box or len(box) != 4:
         return None
     img = Image.open(io.BytesIO(data)).convert("RGB")
     w, h = img.size
     y0, x0, y1, x1 = [v / 1000 for v in box]
-    x0, x1 = max(0, x0 - pad), min(1, x1 + pad)
+    x0, x1 = max(0, x0 - pad_x), min(1, x1 + pad_x)
     y0, y1 = max(0, y0 - pad), min(1, y1 + pad)
     if x1 <= x0 or y1 <= y0:
         return None

@@ -49,8 +49,12 @@ def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
         if re.search(rf"\b{w}\b\.?", t):
             form = f
             t = re.sub(rf"\b{w}\b\.?", " ", t)
+    # remove the dosing schedule and duration first, so "Ace 500 1+0+1" keeps 500 as the strength, not 1
+    t = re.sub(r"(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)", " ", t)
+    t = re.sub(r"\b(?:x\s*)?\d+\s*(?:din|days?|d|mas|months?)\b", " ", t)
+    unit = re.search(r"(\d+(?:\.\d+)?)\s*(?:mg|gm|g|ml|mcg)\b", t)
     nums = _NUM.findall(t)
-    strength = nums[-1] if nums else None
+    strength = unit.group(1) if unit else (nums[0] if nums else None)
     name = re.sub(r"\d+(\.\d+)?\s*(mg|gm|g|ml|mcg)?", " ", t)
     name = re.sub(r"[^a-z\s]+", " ", name)
     return re.sub(r"\s+", " ", name).strip(), strength, form
@@ -118,7 +122,15 @@ class CandidateIndex:
                 s_ok = bool(strength) and strength in re.sub(r"\s", "", p.strength or "")
                 f_ok = bool(form) and form in (p.form or "").lower()
                 out.append(Candidate(p.id, p.brand, p.strength, p.form, p.manufacturer, p.generic, sim, ph, s_ok, f_ok))
-        out.sort(key=lambda c: (-(c.name_score + 0.15 * c.phonetic_match + 0.2 * c.strength_match + 0.05 * c.form_match), c.product_id))
+        def oral_prior(c: Candidate) -> float:
+            # when the form is not written, the common oral forms are the safer default (tablet, then capsule)
+            if form:
+                return 0.0
+            f = (c.form or "").lower()
+            return 0.03 if f.startswith("tablet") else 0.02 if f.startswith("capsule") else 0.0
+
+        out.sort(key=lambda c: (-(c.name_score + 0.15 * c.phonetic_match + 0.2 * c.strength_match + 0.05 * c.form_match
+                                  + oral_prior(c)), c.product_id))
         for i, c in enumerate(out[:k]):
             c.rank = i + 1
         return out[:k]

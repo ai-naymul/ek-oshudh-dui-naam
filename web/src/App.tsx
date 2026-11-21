@@ -1,0 +1,49 @@
+import { useState } from 'react'
+import { AnimatePresence, MotionConfig } from 'motion/react'
+import { api, type CheckResult, type ItemView } from './api'
+import { Welcome } from './Welcome'
+import { CaseScreen } from './CaseScreen'
+import { Results } from './Results'
+
+type Screen = 'welcome' | 'case' | 'results'
+
+export default function App() {
+  const [screen, setScreen] = useState<Screen>('welcome')
+  const [caseId, setCaseId] = useState<string | null>(null)
+  const [items, setItems] = useState<ItemView[]>([])
+  const [result, setResult] = useState<CheckResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function start() {
+    setError(null)
+    try {
+      const c = await api.newCase()
+      setCaseId(c.case_id)
+      setItems([])
+      setScreen('case')
+    } catch {
+      setError('সার্ভারের সাথে সংযোগ হচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করুন।')
+    }
+  }
+
+  async function check() {
+    if (!caseId) return
+    try {
+      setResult(await api.check(caseId))
+      setScreen('results')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  return (
+    <MotionConfig reducedMotion="user">
+      {error && <p role="alert" className="fixed inset-x-4 top-4 z-50 rounded-xl bg-danger p-3 text-center text-white">{error}</p>}
+      <AnimatePresence mode="wait">
+        {screen === 'welcome' && <Welcome key="w" onStart={start} />}
+        {screen === 'case' && caseId && <CaseScreen key="c" caseId={caseId} items={items} setItems={setItems} onCheck={check} />}
+        {screen === 'results' && result && <Results key="r" result={result} onBack={() => setScreen('case')} />}
+      </AnimatePresence>
+    </MotionConfig>
+  )
+}
