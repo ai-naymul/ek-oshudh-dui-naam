@@ -41,6 +41,9 @@ def transliterate(text: str) -> str:
     return "".join(BN_MAP.get(ch, ch) for ch in t)
 
 
+_DIGIT_AS_LETTER = {"0": "o", "1": "l", "5": "s"}
+
+
 def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
     """Split a reading into (name part, strength number, form) e.g. 'Tab. Napa 500' -> ('napa', '500', 'tablet')."""
     t = transliterate(reading).lower()
@@ -52,6 +55,10 @@ def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
     # remove the dosing schedule and duration first, so "Ace 500 1+0+1" keeps 500 as the strength, not 1
     t = re.sub(r"(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)\s*[+\-–]\s*(?:½|\d+(?:\.\d+)?)", " ", t)
     t = re.sub(r"\b(?:x\s*)?\d+\s*(?:din|days?|d|mas|months?)\b", " ", t)
+    # a single digit misread for a letter inside a name: 'Sec1o' -> 'seclo', 'Maxpr0' -> 'maxpro'
+    # (a strength is several digits or stands apart: 'Napa500', 'Rosuva 10' are left alone)
+    t = re.sub(r"(?<=[a-z])([015])(?=[a-z])", lambda m: _DIGIT_AS_LETTER[m.group(1)], t)
+    t = re.sub(r"(?<=[a-z]{3})([01])\b", lambda m: _DIGIT_AS_LETTER[m.group(1)], t)
     unit = re.search(r"(\d+(?:\.\d+)?)\s*(?:mg|gm|g|ml|mcg)\b", t)
     nums = _NUM.findall(t)
     strength = unit.group(1) if unit else (nums[0] if nums else None)

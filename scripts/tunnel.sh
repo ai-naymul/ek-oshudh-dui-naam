@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Demo networking: start the backend (which also serves the built web app) and a Cloudflare quick tunnel.
-# No account or domain needed. Prints the public URL; open it on the laptop and press "ফোনে খুলুন" for the QR.
-# If the tunnel drops, run this again: a new URL and QR in under a minute.
+# OPTIONAL helper. The app runs locally without it (http://localhost:8000). Use this only to open the app on a
+# phone over HTTPS (phone browsers allow the microphone only on HTTPS): it starts the backend if needed and a
+# Cloudflare quick tunnel (no account, no domain), then prints the URL. Press "ফোনে খুলুন" in the app for a QR.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LOG=$(mktemp -t ek_tunnel)
@@ -19,5 +19,3 @@ done
 for _ in $(seq 30); do curl -sf "$URL/health" >/dev/null && break; sleep 2; done
 echo "$URL" > /tmp/ek_tunnel_url
 echo "App + API:   $URL"
-echo "Pages link:  https://ek-oshudh-dui-naam.pages.dev/?api=$URL"
-echo "WhatsApp webhook (Meta dashboard): $URL/whatsapp/webhook"

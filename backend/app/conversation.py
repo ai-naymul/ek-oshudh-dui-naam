@@ -1,4 +1,4 @@
-"""One patient's case, channel-free (web and WhatsApp both use this).
+"""One patient's case: everything the web app, the agent and the MCP server share.
 
 photo/text -> perceive -> candidates -> matching policy -> items to confirm -> rules -> Bangla findings.
 Cases live in memory only (images are never written to disk) and expire after two hours.
@@ -92,6 +92,10 @@ class Engine:
 
     def get(self, case_id: str) -> Case:
         case = self.cases.get(case_id)
+        if case and time.time() - case.created > TTL_SECONDS:   # expired: forget it now, not only on the next new case
+            with self.lock:
+                self.cases.pop(case_id, None)
+            case = None
         if not case:
             raise KeyError(case_id)
         return case

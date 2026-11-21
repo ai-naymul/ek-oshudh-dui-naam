@@ -6,9 +6,9 @@ import time
 import uuid
 from functools import lru_cache
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 APP_VERSION = "0.2.0"
@@ -16,10 +16,11 @@ MAX_UPLOAD = 12 * 1024 * 1024
 
 app = FastAPI(title="Ek Oshudh, Dui Naam API", version=APP_VERSION)
 
-# The web app is served from Cloudflare Pages and calls this backend through a tunnel, so CORS must allow it.
+# The app is served by this same server (same origin). CORS only matters for the Vite dev server on another port
+# and for a phone on the same Wi-Fi or the optional tunnel.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.pages\.dev|https://.*\.trycloudflare\.com|http://localhost:\d+|http://127\.0\.0\.1:\d+|http://192\.168\.\d+\.\d+:\d+",
+    allow_origin_regex=r"https://.*\.trycloudflare\.com|http://localhost:\d+|http://127\.0\.0\.1:\d+|http://192\.168\.\d+\.\d+:\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -169,47 +170,13 @@ def brand_random():
 
 @app.get("/api/cases/{case_id}")
 def get_case(case_id: str):
-    """Reopen a case (e.g. from the WhatsApp link): its items, so the web app can show confirm or results."""
+    """Reopen a case by link (?case=...): its items, so the web app can show confirm or results."""
     t0 = time.time()
     case = _case(case_id)
     return live({"case_id": case.case_id, "items": [engine().item_view(i) for i in case.items]}, t0)
 
 
-# ---------- WhatsApp (Meta Cloud API test number) ----------
-@lru_cache(maxsize=1)
-def whatsapp():
-    from app.channels.whatsapp import WhatsApp
-    return WhatsApp(engine())
-
-
-@app.get("/whatsapp/webhook")
-def wa_verify(request: Request):
-    q = request.query_params
-    challenge = whatsapp().verify(q.get("hub.mode"), q.get("hub.verify_token"), q.get("hub.challenge"))
-    if challenge is None:
-        raise HTTPException(403, "verification failed")
-    return PlainTextResponse(challenge)
-
-
-@app.post("/whatsapp/webhook")
-async def wa_receive(request: Request, background: BackgroundTasks):
-    body = await request.body()
-    wa = whatsapp()
-    if not wa.signature_ok(body, request.headers.get("x-hub-signature-256")):
-        raise HTTPException(401, "bad signature")
-    if not os.environ.get("PUBLIC_API_URL"):
-        wa.public_url = str(request.base_url)      # the tunnel URL this request came through
-    try:
-        payload = json.loads(body or b"{}")
-    except ValueError:
-        raise HTTPException(400, "bad json")
-    for msg in wa.messages(payload):
-        if msg.get("id") and wa.first_time(msg["id"]):
-            background.add_task(wa.handle, msg)      # answer Meta at once; work after the response
-    return {"ok": True}
-
-# The same server also serves the built web app (web/dist), so one tunnel URL is enough for a phone:
-# app and API on one origin. Cloudflare Pages serves the same build as the stable public front door.
+# The same server also serves the built web app (web/dist): one command runs the whole product locally.
 _DIST = os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")
 if os.path.isdir(_DIST):
     from fastapi.staticfiles import StaticFiles

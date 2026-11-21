@@ -1,21 +1,16 @@
-// API client. Backend URL: ?api=... (the QR carries the tunnel URL) > local backend on Vite ports > VITE_API >
-// last QR-given backend (Pages only) > same origin (backend serves the app). Every response is live, never cached.
+// API client. Backend URL: ?api=... > local backend on Vite dev ports > VITE_API > same origin (the backend serves
+// this page itself, the normal case). Every response is live, never cached.
 
 function resolveBase(): string {
   const strip = (u: string) => u.replace(/\/$/, '')
   const fromQuery = new URLSearchParams(window.location.search).get('api')
   if (fromQuery) {
-    try { localStorage.setItem('api', fromQuery) } catch { /* private mode */ }
     return strip(fromQuery)
   }
   // Vite dev/preview: the local backend on the same machine
   if (['5173', '4173'].includes(window.location.port)) return `http://${window.location.hostname}:8000`
   const fromEnv = import.meta.env.VITE_API as string | undefined
   if (fromEnv) return strip(fromEnv)
-  // Cloudflare Pages has no API of its own: use the backend this phone was last given by a QR code
-  if (window.location.hostname.endsWith('.pages.dev')) {
-    try { const saved = localStorage.getItem('api'); if (saved) return strip(saved) } catch { /* ignore */ }
-  }
   // Otherwise the backend is serving this page itself (one tunnel URL for app + API)
   return window.location.origin
 }

@@ -5,8 +5,7 @@
 
 Checks, each with its latency: health; web app page; live brand lookup (typo + Bangla); random brand
 (proves nothing is pre-baked); a typed two-medicine case gives a red Bangla finding; the case reopens by link;
-the Bangla voice reply; optionally a real photo through the AI reader; WhatsApp webhook rejects a forged
-request. Exit code 1 if any required check fails.
+the Bangla voice reply; optionally a real photo through the AI reader. Exit code 1 if any required check fails.
 """
 import argparse
 import json
@@ -105,14 +104,6 @@ def main():
         assert d["items"], "no medicine read"
         return f"{d['kind']}: {got} (* = asks to confirm)", ms
 
-    def forged_webhook():
-        try:
-            req(base, "/whatsapp/webhook", "POST", {"entry": []}, {"x-hub-signature-256": "sha256=forged"})
-            raise AssertionError("forged request accepted: set WA_APP_SECRET before the demo")
-        except urllib.error.HTTPError as e:
-            assert e.code == 401
-            return "forged request rejected (401)", 0
-
     check("health", health)
     check("web app page", page)
     check("brand lookup (typo + Bangla)", lookup)
@@ -123,7 +114,6 @@ def main():
         check("Bangla voice reply", voice, required=False)
     if a.image:
         check("photo through AI reader", photo)
-    check("WhatsApp webhook signature", forged_webhook, required=False)
 
     width = max(len(n) for _, n, _, _ in results)
     for ok, name, ms, detail in results:

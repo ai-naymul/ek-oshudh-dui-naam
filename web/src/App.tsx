@@ -15,7 +15,7 @@ export default function App() {
   const [result, setResult] = useState<CheckResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Opened from a WhatsApp reply (?case=...): continue that case: confirm screen if anything is unsure, else results.
+  // Opened by link (?case=...): continue that case: confirm screen if anything is unsure, else results.
   useEffect(() => {
     const cid = new URLSearchParams(window.location.search).get('case')
     if (!cid) return

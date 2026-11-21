@@ -71,3 +71,11 @@ def test_exact_typed_name_is_accepted_but_typo_asks(client):
     items = client.post(f"/api/cases/{cid}/text", json={"text": "Seclo 20\nSeclloo 20"}).json()["items"]
     assert items[0]["chosen"]["brand"] == "Seclo" and not items[0]["needs_confirm"]
     assert items[1]["needs_confirm"] and items[1]["options"][0]["brand"] == "Seclo"
+
+
+def test_expired_case_is_gone(client):
+    import app.conversation as conv
+    from app.main import engine
+    cid = client.post("/api/cases").json()["case_id"]
+    engine().cases[cid].created -= conv.TTL_SECONDS + 1
+    assert client.get(f"/api/cases/{cid}").status_code == 404 and cid not in engine().cases

@@ -55,3 +55,10 @@ def test_fast_enough(idx):
 def test_schedule_numbers_are_not_read_as_strength(idx, reading, brand, strength):
     top = idx.search(reading, 20)[0]
     assert top.brand == brand and strength in top.strength and top.form.startswith(("Tablet", "Capsule"))
+
+
+@pytest.mark.parametrize("reading,brand,strength", [("Sec1o 20", "Seclo", "20"), ("Maxpr0 20", "Maxpro", "20"),
+                                                     ("Napa500", "Napa", "500"), ("Rosuva10", "Rosuva", "10")])
+def test_digit_misread_for_a_letter(idx, reading, brand, strength):
+    top = idx.search(reading, 20)[0]
+    assert top.brand == brand and strength in top.strength
