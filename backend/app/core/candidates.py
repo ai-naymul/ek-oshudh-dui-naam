@@ -50,9 +50,37 @@ def transliterate(text: str) -> str:
 _DIGIT_AS_LETTER = {"0": "o", "1": "l", "5": "s"}
 
 
+# Words that say WHEN to take a medicine, typed after its name ("Seclo 20 রাতে", "Napa 500 after meals"). None of
+# them is a word inside a registry brand name. Without this, রাতে was transliterated to "rate" and matched Encorate.
+SCHEDULE_WORDS = {
+    "রাতে", "রাত", "সকালে", "সকাল", "দুপুরে", "দুপুর", "বিকালে", "বিকেলে", "সন্ধ্যায়", "দিনে", "প্রতিদিন", "রোজ",
+    "একবার", "দুইবার", "দুবার", "তিনবার", "চারবার", "বার", "খাবারের", "খাবার", "আগে", "পরে", "পর", "খালি", "ভরা",
+    "পেটে", "ঘুমানোর", "করে", "ও", "আর", "দিন", "সপ্তাহ", "মাস", "চলবে",
+    "night", "nightly", "morning", "noon", "evening", "daily", "once", "twice", "thrice", "after", "before", "meal",
+    "meals", "food", "bedtime", "empty", "stomach", "days", "weeks", "months", "and",
+}
+# Dose abbreviations are also parts of real brands (Avloclav BID, Umactin BD, Glunor OD), so they are dropped only
+# after a number: "Napa 500 BD" is a schedule, "Avloclav BID" is a name.
+SCHEDULE_ABBR = {"od", "qd", "bd", "bid", "tds", "tid", "qid", "qds", "hs"}
+
+
+def drop_schedule_words(reading: str) -> str:
+    """Remove schedule words typed after a medicine name; the first word is never removed."""
+    tokens = reading.split()
+    keep, seen_number = tokens[:1], bool(tokens and re.search(r"[0-9০-৯]", tokens[0]))
+    for i, tok in enumerate(tokens[1:], start=1):
+        word = tok.strip(".,;:()").lower()
+        nxt = tokens[i + 1].strip(".,;:()").lower() if i + 1 < len(tokens) else ""
+        if word in SCHEDULE_WORDS or (seen_number and word in SCHEDULE_ABBR) or (word == "at" and nxt in SCHEDULE_WORDS):
+            continue
+        seen_number = seen_number or bool(re.search(r"[0-9০-৯]", tok))
+        keep.append(tok)
+    return " ".join(keep)
+
+
 def parse_hints(reading: str) -> tuple[str, str | None, str | None]:
     """Split a reading into (name part, strength number, form) e.g. 'Tab. Napa 500' -> ('napa', '500', 'tablet')."""
-    t = transliterate(reading).lower()
+    t = transliterate(drop_schedule_words(reading)).lower()
     form = None
     for w, f in FORM_WORDS.items():
         pat = rf"\b{w}s?\b\.?"

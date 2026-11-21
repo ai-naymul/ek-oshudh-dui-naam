@@ -37,3 +37,25 @@ def test_reader_agreement_compares_the_names_not_the_whole_line():
     assert name_agreement("Napa 500 mg tablets", ["NAPA"]) == 1.0
     assert name_agreement("Napa", ["Nopa 500"]) < 0.9
     assert name_agreement("Napa", []) == 0.0
+
+
+@pytest.mark.parametrize("reading,name", [
+    ("Seclo 20 রাতে", "seclo"),                       # the typing box's own example
+    ("Seclo 20 at night", "seclo"),
+    ("Napa 500 দিনে দুইবার খাবারের পরে", "napa"),
+    ("Napa 500 BD after meals", "napa"),
+    ("Ace 500 সকালে ও রাতে", "ace"),
+    ("Avloclav BID 625 mg", "avloclav bid"),          # registry brands that contain schedule-like words stay whole
+    ("Umactin BD", "umactin bd"),
+    ("Night Fresh", "night fresh"),
+    ("Amlovas AT", "amlovas at"),
+])
+def test_schedule_words_typed_after_a_name_are_not_part_of_it(reading, name):
+    assert parse_hints(reading)[0] == name
+
+
+@pytest.mark.skipif(not os.path.exists(g.DB_PATH), reason="graph not built")
+def test_the_typing_example_matches_without_asking():
+    from app.conversation import Engine
+    chosen, _, _, confirm, _ = Engine().match("Seclo 20 রাতে", [], None, False)
+    assert chosen.brand == "Seclo" and confirm is False
