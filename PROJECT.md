@@ -65,7 +65,7 @@ It explains in Bangla (text, voice, picture card) and shows the proof.
 | 3 | Download scripts: registry + handwriting datasets (+ licences) | registry + LICENSES.md done; handwriting script todo |
 | 4 | Knowledge graph build (graph.py) + tests | **done** (21,363 / 13,627 / 1,508; 13,253 priced) |
 | 5 | Candidate generation (candidates.py) + tests | **done** (recall@20 98.3%, 1.7 ms) |
-| 6 | Schedule parser (schedule.py) + tests | todo |
+| 6 | Schedule parser (schedule.py) + tests | **done** (15 tests: 1+0+1, ১+০+১, ½, BD/TDS, দিনে ২ বার, meals, days) |
 | 7 | Perception smoke test: strips, 2 prescriptions, 100 handwritten words | todo |
 | 8 | Handwriting label coverage vs registry + recall@20 | todo |
 | 9 | Handbook: graph, candidates, schedule, tests | todo |
@@ -120,6 +120,6 @@ Teammate issues (Day 1):
 
 ## Next 3 actions
 
-1. #6 schedule parser + tests.
+1. #2 Cloudflare Pages + tunnel hello; #3 handwriting download script; #8 coverage.
 2. #7 perception smoke test (needs the user's 2 prescription photos + a few strip images in `data/prescriptions/`, `data/images_online/`).
 3. #3 handwriting download script + #8 coverage; push CI once the token has workflow scope.
