@@ -48,11 +48,19 @@ photos / voice / typed
   → 7 PROVE     "কীভাবে জানলাম": every step of this check with timings, the matching benchmark, a live lookup
 ```
 
-**Safety design.** No warning is written by a model. A reading the matcher is unsure of, and every spoken name, waits
-for the family's tap and cannot raise a red warning before that. A bag holds old strips, so a duplicate turns red only
-when both medicines are marked **taken now**. Dose limits are switched off until a pharmacist reviews them
-(`config/settings.json`). The optional evidence agent (**সূত্র খুঁজুন**) only suggests, with guardrails in code
-(step budget, grounding check, banned phrases).
+**Safety design** (reviewed for clinical safety; every point is pinned by a test in `backend/tests/test_clinical_safety.py`):
+
+- No warning is written by a model. A reading the matcher is unsure of, and every spoken name, waits for the family's
+  tap and cannot raise a warning before that.
+- Never a false all-clear: while any line waits for confirmation the result says how many were **not checked** (screen,
+  card and voice), and the all-clear says only what was checked ("একই ওষুধ দুবার নেই") and what is not covered.
+- A bag holds old strips, so a duplicate turns red only when both medicines are marked **taken now**.
+- Two lines on one prescription (Farin 5 mg + Farin 1 mg) may be one intended dose: that is a question for the doctor,
+  never a red that could make a family drop one. Eye drops or a cream do not count as a second dose of a tablet.
+- Dose limits are switched off until a pharmacist reviews them (`config/settings.json`); no cheaper-brand hint for
+  narrow-therapeutic-index drugs such as warfarin or levothyroxine.
+- The optional evidence agent (**সূত্র খুঁজুন**) only suggests: a step budget, a suggestion counts only if its own tools
+  found it in this run, and the family sees a fixed sentence naming that evidence, never the model's own words.
 
 ## How well does the matching work?
 
@@ -78,18 +86,38 @@ validation split of 780 words and reported once on a separate test split of 780 
 
 These numbers measure name matching on word images, not the whole path from a phone photo to a warning.
 
+**Strip and box photos, end to end** (`eval/reports/e2_strips.json`, `training/eval_strips.py`): 70 product photos of
+40 common brands from online pharmacy listings, through the full pipeline (reader → registry → decision model). These
+are clean studio photos, so this is an easier set than a phone photo at home, and it is reported as exactly that.
+
+| 70 strip/box photos | Result |
+|---|---|
+| Right brand chosen | 98.6% (69/70; the miss was asked, not accepted) |
+| Accepted without asking | 88.6% |
+| Wrong automatic accepts | 0 |
+| Strength right when the brand is right | 97.1% |
+| Median time per photo | 4.6 s |
+
+This run found a real bug: the reader writes the form in full ("tablets", "Capsules", "Suspension") and those words
+were matched as letters of a name (Napa → Nitalet). After the fix, accepted-without-asking went from 35.7% to 88.6%
+with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cases).
+
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 128 tests, no API key needed (also run in CI on every push)
-cd web && npm run e2e                   # end-to-end: the signature flow at 1440×900 and 390×844 (Playwright)
+cd backend && uv run pytest -q          # 154 tests, no API key needed (also run in CI on every push)
+cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
 
 The tests pin the safety rules (golden cases: Napa + Ace red only when both are taken now, Seclo + Maxpro needs
 checking, combination products, syrups left out of dose sums, nothing ever says "stop"), the matching, the schedule
 parser (১+০+১, দিনে দুইবার, রাতে), the API edge cases (not a photo, impossible doses, AI down, a slow reading not
-freezing the server) and the wording file.
+freezing the server) and the wording file (no Arabic commas or invisible characters).
+
+The end-to-end tests drive the real app in Chrome at laptop and phone size: the sample case (asks first, red only when
+both are taken now, card, details), the not-sure path (registry search, remove and undo), an unconfirmed line never
+shown as an all-clear, every verdict heading on one line, and no sideways scrolling at any step.
 
 ## Changing it on-site
 

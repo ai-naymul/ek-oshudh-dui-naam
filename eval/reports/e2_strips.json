@@ -1,0 +1,1572 @@
+{
+ "summary": {
+  "n_photos": 70,
+  "n_read": 70,
+  "errors": [],
+  "brand_found": 0.986,
+  "brand_found_or_in_options": 0.986,
+  "accepted_automatically": 0.886,
+  "strength_right_when_found": 0.971,
+  "photos_with_a_wrong_automatic_accept": 0,
+  "median_seconds": 4.6,
+  "misses": [
+   {
+    "file": "Rabe_1.jpg",
+    "brand": "Rabe",
+    "read_as": [
+     "Rabe-20"
+    ],
+    "chosen": [
+     "Rabenta"
+    ]
+   }
+  ],
+  "wrong_auto_detail": [],
+  "strength_mismatches": [
+   {
+    "file": "Bizoran_1.webp",
+    "want": "5 mg+20 mg"
+   },
+   {
+    "file": "Filmet_2.jpg",
+    "want": "200 mg"
+   }
+  ]
+ },
+ "rows": [
+  {
+   "file": "Napa_1.jpg",
+   "brand": "Napa",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 3.9,
+   "read_as": [
+    "Napa"
+   ],
+   "chosen": [
+    "Napa"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Napa_2.webp",
+   "brand": "Napa",
+   "strength": "120 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 11.7,
+   "read_as": [
+    "Children's Napa",
+    "Children's Napa",
+    "Children's Napa",
+    "নাপা"
+   ],
+   "chosen": [
+    "Napa",
+    "Napa",
+    "Napa",
+    "Napa"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Napa-Extra_1.jpg",
+   "brand": "Napa Extra",
+   "strength": "500 mg+65 mg",
+   "kind": "mixed",
+   "seconds": 5.3,
+   "read_as": [
+    "Napa Extra",
+    "Napa Extra"
+   ],
+   "chosen": [
+    "Napa Extra",
+    "Napa Extra"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Napa-Rapid_1.jpg",
+   "brand": "Napa Rapid",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 5.8,
+   "read_as": [
+    "Napa Rapid"
+   ],
+   "chosen": [
+    "Napa Rapid"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Ace_1.webp",
+   "brand": "Ace",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 5.5,
+   "read_as": [
+    "Ace",
+    "Ace",
+    "এইস",
+    "Ace"
+   ],
+   "chosen": [
+    "Ace",
+    "Ace",
+    "Actemra",
+    "Ace"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ace_2.jpg",
+   "brand": "Ace",
+   "strength": "120 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 4.2,
+   "read_as": [
+    "Ace",
+    "Ace"
+   ],
+   "chosen": [
+    "Ace",
+    "Ace"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ace-Plus_1.jpg",
+   "brand": "Ace Plus",
+   "strength": "500 mg+65 mg",
+   "kind": "mixed",
+   "seconds": 4.4,
+   "read_as": [
+    "Ace Plus"
+   ],
+   "chosen": [
+    "Ace Plus"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Renova_1.jpg",
+   "brand": "Renova",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 4.3,
+   "read_as": [
+    "RENOVA"
+   ],
+   "chosen": [
+    "Renova"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Renova_2.jpg",
+   "brand": "Renova",
+   "strength": "120 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 3.7,
+   "read_as": [
+    "RENOVA",
+    "RENOVA"
+   ],
+   "chosen": [
+    "Renova",
+    "Renova"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fast_1.jpg",
+   "brand": "Fast",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 3.6,
+   "read_as": [
+    "FAST"
+   ],
+   "chosen": [
+    "Fast"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fast_2.jpg",
+   "brand": "Fast",
+   "strength": "120 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 3.4,
+   "read_as": [
+    "Fast",
+    "Fast"
+   ],
+   "chosen": [
+    "Fast",
+    "Fast"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Seclo_1.jpg",
+   "brand": "Seclo",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 4.1,
+   "read_as": [
+    "Seclo"
+   ],
+   "chosen": [
+    "Seclo"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Seclo_2.png",
+   "brand": "Seclo",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 2.9,
+   "read_as": [
+    "Seclo"
+   ],
+   "chosen": [
+    "Seclo"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Maxpro_1.jpg",
+   "brand": "Maxpro",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 2.8,
+   "read_as": [
+    "Maxpro 20"
+   ],
+   "chosen": [
+    "Maxpro"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Maxpro_2.webp",
+   "brand": "Maxpro",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 8.9,
+   "read_as": [
+    "Maxpro 40",
+    "ম্যাক্সপ্রো ৪০",
+    "Maxpro 40",
+    "Maxpro 40",
+    "ম্যাক্সপ্রো ৪০"
+   ],
+   "chosen": [
+    "Maxpro",
+    "Maxpro",
+    "Maxpro",
+    "Maxpro",
+    "Maxpro"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Losectil_1.jpg",
+   "brand": "Losectil",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 3.5,
+   "read_as": [
+    "Losectil"
+   ],
+   "chosen": [
+    "Losectil"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Pantonix_1.jpg",
+   "brand": "Pantonix",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 3.9,
+   "read_as": [
+    "Pantonix 20"
+   ],
+   "chosen": [
+    "Pantonix"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Pantonix_2.jpg",
+   "brand": "Pantonix",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 5.0,
+   "read_as": [
+    "Pantonix"
+   ],
+   "chosen": [
+    "Pantonix"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Sergel_1.jpg",
+   "brand": "Sergel",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 3.4,
+   "read_as": [
+    "Sergel",
+    "Sergel"
+   ],
+   "chosen": [
+    "Sergel",
+    "Sergel"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Sergel_2.jpg",
+   "brand": "Sergel",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 3.8,
+   "read_as": [
+    "Sergel",
+    "Sergel"
+   ],
+   "chosen": [
+    "Sergel",
+    "Sergel"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Nexum_1.jpg",
+   "brand": "Nexum",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 3.3,
+   "read_as": [
+    "Nexum"
+   ],
+   "chosen": [
+    "Nexum"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Nexum_2.jpg",
+   "brand": "Nexum",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 124.2,
+   "read_as": [
+    "Nexum"
+   ],
+   "chosen": [
+    "Nexum"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fexo_1.jpg",
+   "brand": "Fexo",
+   "strength": "120 mg",
+   "kind": "mixed",
+   "seconds": 9.4,
+   "read_as": [
+    "Fexo 120",
+    "Fexo 120",
+    "Fexo 120",
+    "Fexo 120",
+    "ফেক্সো ১২০",
+    "ফেক্সো ১২০"
+   ],
+   "chosen": [
+    "Fexo",
+    "Fexo",
+    "Fexo",
+    "Fexo",
+    "Fevigra",
+    "Fevigra"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fexo_2.jpg",
+   "brand": "Fexo",
+   "strength": "180 mg",
+   "kind": "mixed",
+   "seconds": 481.9,
+   "read_as": [
+    "Fexo",
+    "Fexo"
+   ],
+   "chosen": [
+    "Fexo",
+    "Fexo"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Alatrol_1.jpg",
+   "brand": "Alatrol",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 8.1,
+   "read_as": [
+    "Alatrol",
+    "Alatrol",
+    "এলাট্রল",
+    "Alatrol",
+    "এলাট্রল"
+   ],
+   "chosen": [
+    "Alatrol",
+    "Alatrol",
+    "Tiagra",
+    "Alatrol",
+    "Imigra"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Monas_1.jpg",
+   "brand": "Monas",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 3.2,
+   "read_as": [
+    "Monas 10",
+    "Monas"
+   ],
+   "chosen": [
+    "Monas",
+    "Monas"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Montene_1.jpg",
+   "brand": "Montene",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 125.0,
+   "read_as": [
+    "Montene 10",
+    "Montene 10"
+   ],
+   "chosen": [
+    "Montene",
+    "Montene"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Montene_2.jpg",
+   "brand": "Montene",
+   "strength": "4 mg",
+   "kind": "mixed",
+   "seconds": 4.8,
+   "read_as": [
+    "Montene 4"
+   ],
+   "chosen": [
+    "Montene"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Rosuva_1.jpg",
+   "brand": "Rosuva",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 11.4,
+   "read_as": [
+    "Rosuva 10",
+    "Rosuva TM 10",
+    "রসুভা TM ১০",
+    "Rosuva TM 10",
+    "রসুভা TM ১০"
+   ],
+   "chosen": [
+    "Rosuva",
+    "Rosuva",
+    "Rosuva",
+    "Rosuva",
+    "Rosuva"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Rosuva_2.jpg",
+   "brand": "Rosuva",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 5.5,
+   "read_as": [
+    "Rosuva",
+    "Rosuva",
+    "রসুভা"
+   ],
+   "chosen": [
+    "Rosuva",
+    "Rosuva",
+    "Rosuva"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Osartil_1.jpg",
+   "brand": "Osartil",
+   "strength": "50 mg",
+   "kind": "mixed",
+   "seconds": 3.0,
+   "read_as": [
+    "Osartil"
+   ],
+   "chosen": [
+    "Osartil"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Osartil_2.jpg",
+   "brand": "Osartil",
+   "strength": "100 mg",
+   "kind": "mixed",
+   "seconds": 6.2,
+   "read_as": [
+    "Osartil 100",
+    "Osartil 100",
+    "ওসারটিল ১০০",
+    "Osartil 100",
+    "ওসারটিল ১০০",
+    "Osartil 100"
+   ],
+   "chosen": [
+    "Osartil",
+    "Osartil",
+    "Osartil",
+    "Osartil",
+    "Osartil",
+    "Osartil"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Clopid_1.jpg",
+   "brand": "Clopid",
+   "strength": "75 mg",
+   "kind": "mixed",
+   "seconds": 5.9,
+   "read_as": [
+    "Clopid",
+    "CLOPID",
+    "ক্লপিড",
+    "CLOPID"
+   ],
+   "chosen": [
+    "Clopid",
+    "Clopid",
+    "Imigra",
+    "Clopid"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Ecosprin_1.webp",
+   "brand": "Ecosprin",
+   "strength": "75 mg",
+   "kind": "mixed",
+   "seconds": 3.1,
+   "read_as": [
+    "Ecosprin"
+   ],
+   "chosen": [
+    "Ecosprin"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ecosprin_2.jpg",
+   "brand": "Ecosprin",
+   "strength": "81 mg",
+   "kind": "mixed",
+   "seconds": 16.0,
+   "read_as": [
+    "Ecosprin 81",
+    "ইকোস্প্রিন ११"
+   ],
+   "chosen": [
+    "Ecosprin",
+    "Ecosprin"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2/R3 disagree"
+  },
+  {
+   "file": "Comet_1.jpg",
+   "brand": "Comet",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 5.4,
+   "read_as": [
+    "Comet 500",
+    "Comet 500",
+    "কমেট ৫০০"
+   ],
+   "chosen": [
+    "Comet",
+    "Comet",
+    "Comet"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Comet_2.jpg",
+   "brand": "Comet",
+   "strength": "850 mg",
+   "kind": "mixed",
+   "seconds": 4.2,
+   "read_as": [
+    "Comet",
+    "Comet"
+   ],
+   "chosen": [
+    "Comet",
+    "Comet"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Bizoran_1.webp",
+   "brand": "Bizoran",
+   "strength": "5 mg+20 mg",
+   "kind": "mixed",
+   "seconds": 5.3,
+   "read_as": [
+    "Bizoran"
+   ],
+   "chosen": [
+    "Bizoran"
+   ],
+   "found": true,
+   "auto": false,
+   "in_options": true,
+   "strength_ok": false,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2+R3 agree, confirm"
+  },
+  {
+   "file": "Bizoran_2.jpg",
+   "brand": "Bizoran",
+   "strength": "5 mg+40 mg",
+   "kind": "mixed",
+   "seconds": 3.5,
+   "read_as": [
+    "Bizoran 5/40",
+    "Bizoran 5/40"
+   ],
+   "chosen": [
+    "Bizoran",
+    "Bizoran"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Amdocal_1.jpg",
+   "brand": "Amdocal",
+   "strength": "5 mg",
+   "kind": "mixed",
+   "seconds": 4.9,
+   "read_as": [
+    "Amdocal-5",
+    "Amdocal 5"
+   ],
+   "chosen": [
+    "Amdocal",
+    "Amdocal"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Amdocal_2.jpg",
+   "brand": "Amdocal",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 5.1,
+   "read_as": [
+    "Amdocal-10"
+   ],
+   "chosen": [
+    "Amdocal"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ciprocin_1.jpg",
+   "brand": "Ciprocin",
+   "strength": "500 mg",
+   "kind": "box",
+   "seconds": 2.7,
+   "read_as": [
+    "Ciprocin"
+   ],
+   "chosen": [
+    "Ciprocin"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ciprocin_2.jpg",
+   "brand": "Ciprocin",
+   "strength": "250 mg",
+   "kind": "mixed",
+   "seconds": 3.0,
+   "read_as": [
+    "Ciprocin"
+   ],
+   "chosen": [
+    "Ciprocin"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Zimax_1.jpg",
+   "brand": "Zimax",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 3.1,
+   "read_as": [
+    "ZiMAx"
+   ],
+   "chosen": [
+    "Zimax"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Zimax_2.jpg",
+   "brand": "Zimax",
+   "strength": "250 mg",
+   "kind": "mixed",
+   "seconds": 3.4,
+   "read_as": [
+    "ZiMAX"
+   ],
+   "chosen": [
+    "Zimax"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Tufnil_1.jpg",
+   "brand": "Tufnil",
+   "strength": "200 mg",
+   "kind": "mixed",
+   "seconds": 3.8,
+   "read_as": [
+    "Tufnil"
+   ],
+   "chosen": [
+    "Tufnil"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fenadin_1.jpg",
+   "brand": "Fenadin",
+   "strength": "120 mg",
+   "kind": "mixed",
+   "seconds": 4.9,
+   "read_as": [
+    "FENADIN",
+    "Fenadin"
+   ],
+   "chosen": [
+    "Fenadin",
+    "Fenadin"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Fenadin_2.jpg",
+   "brand": "Fenadin",
+   "strength": "180 mg",
+   "kind": "mixed",
+   "seconds": 4.7,
+   "read_as": [
+    "Fenadin"
+   ],
+   "chosen": [
+    "Fenadin"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Deslor_1.jpg",
+   "brand": "Deslor",
+   "strength": "5 mg",
+   "kind": "mixed",
+   "seconds": 8.5,
+   "read_as": [
+    "Deslor",
+    "Deslor",
+    "ডেসলর",
+    "Deslor",
+    "ডেসলর"
+   ],
+   "chosen": [
+    "Deslor",
+    "Deslor",
+    "Deslorin",
+    "Deslor",
+    "Desol"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Xinc_1.jpg",
+   "brand": "Xinc",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 126.7,
+   "read_as": [
+    "Xinc"
+   ],
+   "chosen": [
+    "Xinc"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Xinc_2.jpg",
+   "brand": "Xinc",
+   "strength": "10 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 3.0,
+   "read_as": [
+    "Xinc"
+   ],
+   "chosen": [
+    "Xinc"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Calbo_1.jpg",
+   "brand": "Calbo",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 4.9,
+   "read_as": [
+    "Calbo"
+   ],
+   "chosen": [
+    "Calbo"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Neuro-B_1.jpg",
+   "brand": "Neuro-B",
+   "strength": "100 mg+200 mg+200 mcg",
+   "kind": "bottle",
+   "seconds": 5.4,
+   "read_as": [
+    "Neuro-B",
+    "Neuro-B"
+   ],
+   "chosen": [
+    "Neuro-B",
+    "Neuro-B"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Gaviscon_1.jpg",
+   "brand": "Gaviscon",
+   "strength": "(500 mg+267 mg+160 mg)/10 ml",
+   "kind": "bottle",
+   "seconds": 3.2,
+   "read_as": [
+    "GAVISCON"
+   ],
+   "chosen": [
+    "Gaviscon"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "other",
+   "method": "exact name"
+  },
+  {
+   "file": "Flagyl_1.jpg",
+   "brand": "Flagyl",
+   "strength": "400 mg",
+   "kind": "mixed",
+   "seconds": 5.0,
+   "read_as": [
+    "Flagyl",
+    "Flagyl",
+    "Flagyl",
+    "Flagyl",
+    "Flagyl"
+   ],
+   "chosen": [
+    "Flagyl",
+    "Flagyl",
+    "Flagyl",
+    "Flagyl",
+    "Flagyl"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Flagyl_2.jpg",
+   "brand": "Flagyl",
+   "strength": "200 mg/5 ml",
+   "kind": "bottle",
+   "seconds": 5.9,
+   "read_as": [
+    "Flagyl",
+    "Flagyl"
+   ],
+   "chosen": [
+    "Flagyl",
+    "Flagyl"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Filmet_1.jpg",
+   "brand": "Filmet",
+   "strength": "400 mg",
+   "kind": "mixed",
+   "seconds": 3.4,
+   "read_as": [
+    "Filmet"
+   ],
+   "chosen": [
+    "Filmet"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Filmet_2.jpg",
+   "brand": "Filmet",
+   "strength": "200 mg",
+   "kind": "mixed",
+   "seconds": 3.9,
+   "read_as": [
+    "Filmet"
+   ],
+   "chosen": [
+    "Filmet"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": false,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Esoral_1.jpg",
+   "brand": "Esoral",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 3.9,
+   "read_as": [
+    "ESORAL 20"
+   ],
+   "chosen": [
+    "Esoral"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Esoral_2.jpg",
+   "brand": "Esoral",
+   "strength": "40 mg",
+   "kind": "mixed",
+   "seconds": 2.5,
+   "read_as": [
+    "ESORAL"
+   ],
+   "chosen": [
+    "Esoral"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Rabe_1.jpg",
+   "brand": "Rabe",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 5.1,
+   "read_as": [
+    "Rabe-20"
+   ],
+   "chosen": [
+    "Rabenta"
+   ],
+   "found": false,
+   "auto": false,
+   "in_options": false,
+   "strength_ok": false,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": null
+  },
+  {
+   "file": "Rabe_2.jpg",
+   "brand": "Rabe",
+   "strength": "20 mg",
+   "kind": "mixed",
+   "seconds": 3.0,
+   "read_as": [
+    "Rabe-20"
+   ],
+   "chosen": [
+    "Rabe"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Ostocal_1.jpg",
+   "brand": "Ostocal",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 2.7,
+   "read_as": [
+    "Ostocal"
+   ],
+   "chosen": [
+    "Ostocal"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Tamen_1.jpg",
+   "brand": "Tamen",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 4.6,
+   "read_as": [
+    "TAMEN"
+   ],
+   "chosen": [
+    "Tamen"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Rolac_1.jpg",
+   "brand": "Rolac",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 4.6,
+   "read_as": [
+    "Rolac",
+    "Rolac"
+   ],
+   "chosen": [
+    "Rolac",
+    "Rolac"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Napa_3.jpg",
+   "brand": "Napa",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 3.0,
+   "read_as": [
+    "Napa"
+   ],
+   "chosen": [
+    "Napa"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Monas_2.jpg",
+   "brand": "Monas",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 489.1,
+   "read_as": [
+    "Monas 10",
+    "Monas 10"
+   ],
+   "chosen": [
+    "Monas",
+    "Monas"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  },
+  {
+   "file": "Amdocal_3.jpg",
+   "brand": "Amdocal",
+   "strength": "5 mg",
+   "kind": "mixed",
+   "seconds": 6.4,
+   "read_as": [
+    "Amdocal-5",
+    "এ্যামডোকাল-৫",
+    "Amdocal-5",
+    "Amdocal 5"
+   ],
+   "chosen": [
+    "Amdocal",
+    "Amdocal",
+    "Amdocal",
+    "Amdocal"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Ostocal_2.jpg",
+   "brand": "Ostocal",
+   "strength": "500 mg",
+   "kind": "mixed",
+   "seconds": 3.3,
+   "read_as": [
+    "Ostocal"
+   ],
+   "chosen": [
+    "Ostocal"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "exact name"
+  },
+  {
+   "file": "Alatrol_2.jpg",
+   "brand": "Alatrol",
+   "strength": "10 mg",
+   "kind": "mixed",
+   "seconds": 7.4,
+   "read_as": [
+    "Alatrol",
+    "Alatrol",
+    "Alatrol",
+    "এলাট্রোল"
+   ],
+   "chosen": [
+    "Alatrol",
+    "Alatrol",
+    "Alatrol",
+    "Desatrol"
+   ],
+   "found": true,
+   "auto": true,
+   "in_options": true,
+   "strength_ok": true,
+   "wrong_auto": [],
+   "doc_kind": "box",
+   "method": "R2"
+  }
+ ]
+}
