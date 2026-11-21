@@ -72,7 +72,10 @@ def to_mg(strength: str) -> float | None:
 
 
 def build(raw_dir: str = RAW, db_path: str = DB_PATH) -> dict:
+    """Build into a temporary file, then swap it in atomically: a running server or eval that has the old file
+    open keeps reading it safely, and never sees a half-built database."""
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    final, db_path = db_path, db_path + f".building-{os.getpid()}"
     if os.path.exists(db_path):
         os.remove(db_path)
     con = sqlite3.connect(db_path)
@@ -110,6 +113,7 @@ def build(raw_dir: str = RAW, db_path: str = DB_PATH) -> dict:
         priced=con.execute("SELECT COUNT(*) FROM product WHERE unit_price IS NOT NULL").fetchone()[0],
     )
     con.close()
+    os.replace(db_path, final)
     return stats
 
 

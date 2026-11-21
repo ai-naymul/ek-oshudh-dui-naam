@@ -10,9 +10,11 @@ pytestmark = pytest.mark.skipif(not os.path.exists(os.path.join(g.RAW, "medicine
 
 
 @pytest.fixture(scope="module")
-def built():
-    stats = g.build()
-    return stats, g.Graph()
+def built(tmp_path_factory):
+    # Build a private copy: never replace the shared database a running server may be reading.
+    path = str(tmp_path_factory.mktemp("graph") / "graph.sqlite")
+    stats = g.build(db_path=path)
+    return stats, g.Graph(path)
 
 
 def test_counts_match_dataset(built):
