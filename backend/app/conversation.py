@@ -234,9 +234,8 @@ class Engine:
 
     @staticmethod
     def _same_prescription(a: dict, b: dict) -> bool:
-        """The same prescription photographed again? Two readings of one photo are never identical (the reader writes
-        'Triocim' once and 'Triscim' the next time, the doctor in English once and in Bangla the next), so compare
-        loosely. A different month means a new visit, even with the same medicines. Saying "same prescription again?"
+        """The same prescription photographed again? Two readings of one photo are never identical (a letter is read
+        differently, the doctor is written in English once and in Bangla the next), so compare loosely. A different month means a new visit, even with the same medicines. Saying "same prescription again?"
         by mistake costs the family one tap; missing it would show every line as a duplicate."""
         from rapidfuzz import fuzz
         # Only the month decides: day and year digits on stamps are misread (13 AUG 2026 read as 18 AUG 2020), the

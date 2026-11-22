@@ -84,11 +84,12 @@ def test_the_welcome_number_is_the_raw_test_accuracy_not_the_audited_one():
     assert ev["top1_audited"] == policy["top1_test_audited"]["R2"]
 
 
-# Real readings of ONE photo differ a little each time (21 Nov test with a real prescription: "Triocim" one read,
-# "Triscim" the next), so an exact comparison let the same prescription in twice and every line turned into a
-# false "same medicine twice".
-RX_DUTTA = [("Napa Extend", "665 mg", "1+1+1"), ("Triocim", "400 mg", "1+0+1"), ("Remmo", "20 mg", "1+0+1"),
-            ("Motigut", "10 mg", "1+0+1")]
+# Real readings of ONE photo differ a little each time (a letter misread, the doctor written in English once and in
+# Bangla the next, a stamped date misread), so an exact comparison let the same prescription in twice and every line
+# turned into a false "same medicine twice". Names below are made up.
+RX = [("Napa Extend", "665 mg", "1+1+1"), ("Seclo", "20 mg", "1+0+1"), ("Fexo", "120 mg", "0+0+1"),
+      ("Montair", "10 mg", "0+0+1")]
+DOCTOR = "Dr. Farhana Karim"
 
 
 def _photo(client, monkeypatch, cid, lines, doctor, date):
@@ -100,31 +101,31 @@ def _photo(client, monkeypatch, cid, lines, doctor, date):
 
 
 @pytest.mark.parametrize("lines,doctor,date", [
-    ([("Napa Extend", "665mg", "1-1-1"), ("Triscim", "400mg", "1-0-1"), ("Remmo", "20mg", "1-0-1"),
-      ("Motigut", "10mg", "1-0-1")], "Dr Hiranmoy Dutta MBBS", "10/06/2025"),     # letters and formats differ
-    (RX_DUTTA, "ডাঃ হিরন্ময় দত্ত", ""),                                           # doctor read in Bangla, no date
-    (RX_DUTTA[:2], "Dr. Hiranmoy Dutta", "Jun 10, 2025"),                          # a closer photo of the top half
-    (RX_DUTTA, "Dr. Hiranmoy Dutta", "18 Jun 2020"),       # a stamped date misread (day and year digits), same month
+    ([("Napa Extend", "665mg", "1-1-1"), ("Secla", "20mg", "1-0-1"), ("Fexo", "120mg", "0-0-1"),
+      ("Montair", "10mg", "0-0-1")], "Dr Farhana Karim MBBS", "10/06/2025"),      # letters and formats differ
+    (RX, "ডাঃ ফারহানা করিম", ""),                                                 # doctor read in Bangla, no date
+    (RX[:2], DOCTOR, "Jun 10, 2025"),                                             # a closer photo of the top half
+    (RX, DOCTOR, "18 Jun 2020"),                           # a stamped date misread (day and year digits), same month
 ])
 def test_the_same_prescription_read_a_little_differently_is_still_caught(client, monkeypatch, lines, doctor, date):
     cid = client.post("/api/cases").json()["case_id"]
-    first = _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "Jun 10, 2025")
+    first = _photo(client, monkeypatch, cid, RX, DOCTOR, "Jun 10, 2025")
     again = _photo(client, monkeypatch, cid, lines, doctor, date)
     assert again["duplicate_of"] == first["doc_id"] and again["items"] == []
 
 
 def test_a_new_visit_with_the_same_medicines_is_not_called_a_repeat(client, monkeypatch):
     cid = client.post("/api/cases").json()["case_id"]
-    _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "Jun 10, 2025")
-    later = _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "28.09.2026")
+    _photo(client, monkeypatch, cid, RX, DOCTOR, "Jun 10, 2025")
+    later = _photo(client, monkeypatch, cid, RX, DOCTOR, "28.09.2026")
     assert later["duplicate_of"] is None and len(later["items"]) == 4
 
 
 def test_a_different_prescription_from_the_same_doctor_is_not_a_repeat(client, monkeypatch):
     cid = client.post("/api/cases").json()["case_id"]
-    _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Ayub Nabi", "")
+    _photo(client, monkeypatch, cid, RX, "Dr. Tanvir Hasan", "")
     other = _photo(client, monkeypatch, cid, [("Exium", "20 mg", "1+0+1"), ("Alatrol", "10 mg", "0+0+1"),
-                                              ("Napa Extend", "665 mg", "1+0+1"), ("Calamine", "", "")], "Dr. Ayub Nabi", "")
+                                              ("Napa Extend", "665 mg", "1+0+1"), ("Calamine", "", "")], "Dr. Tanvir Hasan", "")
     assert other["duplicate_of"] is None
 
 
