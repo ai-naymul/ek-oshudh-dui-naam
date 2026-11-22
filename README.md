@@ -30,6 +30,10 @@ same Wi-Fi.
 
 ## How it works: the model reads, the registry and fixed rules decide
 
+[![System diagram: inputs, the AI reads, the registry and decision model match, fixed safety rules check, the Bangla result](docs/architecture.png)](docs/architecture.png)
+
+*Click the diagram to open it full size.* The same pipeline, step by step:
+
 ```
 photos / voice / typed
   → 1 READ      Gemini 3.8 Flash reads each line into a strict schema (name, alternatives, strength, schedule,
