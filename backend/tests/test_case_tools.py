@@ -82,3 +82,56 @@ def test_the_welcome_number_is_the_raw_test_accuracy_not_the_audited_one():
     ev = TestClient(app).get("/api/stats").json()["eval"]
     assert ev["top1"] == policy["top1_test"]["R2"]
     assert ev["top1_audited"] == policy["top1_test_audited"]["R2"]
+
+
+# Real readings of ONE photo differ a little each time (21 Nov test with a real prescription: "Triocim" one read,
+# "Triscim" the next), so an exact comparison let the same prescription in twice and every line turned into a
+# false "same medicine twice".
+RX_DUTTA = [("Napa Extend", "665 mg", "1+1+1"), ("Triocim", "400 mg", "1+0+1"), ("Remmo", "20 mg", "1+0+1"),
+            ("Motigut", "10 mg", "1+0+1")]
+
+
+def _photo(client, monkeypatch, cid, lines, doctor, date):
+    import app.ai.perceive as perceive
+    from tests.test_api import fake_read
+    from tests.test_robustness import jpg
+    monkeypatch.setattr(perceive, "read_image", fake_read(lines, doctor=doctor, date=date))
+    return client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")}).json()
+
+
+@pytest.mark.parametrize("lines,doctor,date", [
+    ([("Napa Extend", "665mg", "1-1-1"), ("Triscim", "400mg", "1-0-1"), ("Remmo", "20mg", "1-0-1"),
+      ("Motigut", "10mg", "1-0-1")], "Dr Hiranmoy Dutta MBBS", "10/06/2025"),     # letters and formats differ
+    (RX_DUTTA, "ডাঃ হিরন্ময় দত্ত", ""),                                           # doctor read in Bangla, no date
+    (RX_DUTTA[:2], "Dr. Hiranmoy Dutta", "Jun 10, 2025"),                          # a closer photo of the top half
+    (RX_DUTTA, "Dr. Hiranmoy Dutta", "18 Jun 2020"),       # a stamped date misread (day and year digits), same month
+])
+def test_the_same_prescription_read_a_little_differently_is_still_caught(client, monkeypatch, lines, doctor, date):
+    cid = client.post("/api/cases").json()["case_id"]
+    first = _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "Jun 10, 2025")
+    again = _photo(client, monkeypatch, cid, lines, doctor, date)
+    assert again["duplicate_of"] == first["doc_id"] and again["items"] == []
+
+
+def test_a_new_visit_with_the_same_medicines_is_not_called_a_repeat(client, monkeypatch):
+    cid = client.post("/api/cases").json()["case_id"]
+    _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "Jun 10, 2025")
+    later = _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Hiranmoy Dutta", "28.09.2026")
+    assert later["duplicate_of"] is None and len(later["items"]) == 4
+
+
+def test_a_different_prescription_from_the_same_doctor_is_not_a_repeat(client, monkeypatch):
+    cid = client.post("/api/cases").json()["case_id"]
+    _photo(client, monkeypatch, cid, RX_DUTTA, "Dr. Ayub Nabi", "")
+    other = _photo(client, monkeypatch, cid, [("Exium", "20 mg", "1+0+1"), ("Alatrol", "10 mg", "0+0+1"),
+                                              ("Napa Extend", "665 mg", "1+0+1"), ("Calamine", "", "")], "Dr. Ayub Nabi", "")
+    assert other["duplicate_of"] is None
+
+
+@pytest.mark.parametrize("text,parsed", [
+    ("Jun 10, 2025", (10, 6, 25)), ("10/06/2025", (10, 6, 25)), ("18/5/25", (18, 5, 25)), ("18 SEP 2026", (18, 9, 26)),
+    ("10.08.2026", (10, 8, 26)), ("১০.০৮.২০২৬", (10, 8, 26)), ("24 JUN 2025", (24, 6, 25)), ("", None), ("Date:", None),
+])
+def test_prescription_dates_in_the_formats_doctors_write(text, parsed):
+    from app.conversation import _parse_date
+    assert _parse_date(text) == parsed

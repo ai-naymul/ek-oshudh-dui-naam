@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -23,6 +24,30 @@ from app.core.schedule import parse as parse_schedule
 from app.core.settings import DEFAULTS as SETTINGS_DEFAULTS, _merge, load_settings
 
 POLICY_PATH = os.path.join(ROOT, "models", "policy.json")
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+
+
+def _parse_date(text: str) -> tuple | None:
+    """'Jun 10, 2025', '10/06/2025', '18 SEP 2026', '১০.০৮.২০২৬' -> (day, month, year % 100); None if unreadable.
+    Bangladeshi prescriptions write numeric dates day first."""
+    t = text.translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).lower()
+    month = next((n for m, n in _MONTHS.items() if m in t), None)
+    nums = [int(x) for x in re.findall(r"\d+", t)]
+    year = next((n for n in nums if n >= 1000), None)
+    rest = [n for n in nums if n != year]
+    if year is None and len(rest) == 3:
+        year = rest.pop()
+    if year is None or not rest:
+        return None
+    if month is None:
+        if len(rest) < 2:
+            return None
+        day, month = rest[0], rest[1]
+    else:
+        day = rest[0]
+    return (day, month, year % 100) if 1 <= day <= 31 and 1 <= month <= 12 else None
+
+
 EXACT_AGREE = 0.9   # both photo readers wrote (nearly) the same brand text
 
 DEFAULT_POLICY = {"method": "R1+R3", "r1_accept": 0.85, "r1_margin": 0.10, "r2_accept": 0.98, "agree_min": None,
@@ -201,11 +226,29 @@ class Engine:
 
     # ---------- inputs ----------
     @staticmethod
-    def _doc_signature(read: dict) -> tuple:
-        """Same doctor, same date and the same written names: the same prescription photographed again."""
-        norm = lambda s: " ".join((s or "").lower().split())
-        return (norm(read.get("doctor_text")), norm(read.get("date_text")),
-                tuple(sorted(norm(i.get("brand_text")) for i in read["items"])))
+    def _doc_signature(read: dict) -> dict:
+        """What identifies a prescription photo: the doctor, the date and the medicine names as read."""
+        return {"doctor": " ".join((read.get("doctor_text") or "").lower().replace(".", " ").split()),
+                "date": _parse_date(read.get("date_text") or ""),
+                "names": [n for n in (parse_hints(i.get("brand_text", ""))[0] for i in read["items"]) if n]}
+
+    @staticmethod
+    def _same_prescription(a: dict, b: dict) -> bool:
+        """The same prescription photographed again? Two readings of one photo are never identical (the reader writes
+        'Triocim' once and 'Triscim' the next time, the doctor in English once and in Bangla the next), so compare
+        loosely. A different month means a new visit, even with the same medicines. Saying "same prescription again?"
+        by mistake costs the family one tap; missing it would show every line as a duplicate."""
+        from rapidfuzz import fuzz
+        # Only the month decides: day and year digits on stamps are misread (13 AUG 2026 read as 18 AUG 2020), the
+        # month rarely is, and a real follow-up visit is almost always in another month.
+        if a["date"] and b["date"] and a["date"][1] != b["date"][1]:
+            return False
+        if not a["names"] or not b["names"]:
+            return False
+        alike = sum(1 for x in a["names"] if max(fuzz.ratio(x, y) for y in b["names"]) >= 80)
+        overlap = alike / max(len(a["names"]), len(b["names"]))
+        same_doctor = bool(a["doctor"] and b["doctor"]) and fuzz.token_set_ratio(a["doctor"], b["doctor"]) >= 80
+        return overlap >= 0.75 or (overlap >= 0.5 and same_doctor)
 
     def add_image(self, case: Case, data: bytes, allow_repeat: bool = False) -> dict:
         from app.ai.gemini import image_part
@@ -214,7 +257,7 @@ class Engine:
         read = read_image(data)
         sig = self._doc_signature(read)
         if read["kind"] == "prescription" and not allow_repeat:
-            seen = next((d for d in case.docs if d.get("sig") == sig), None)
+            seen = next((d for d in case.docs if d.get("sig") and self._same_prescription(sig, d["sig"])), None)
             if seen:   # counted once: otherwise one prescription would look like two doctors prescribing the same thing
                 case.step("perceive", t0, kind=read["kind"], duplicate_of=seen["doc_id"])
                 return {"doc_id": None, "duplicate_of": seen["doc_id"], "kind": read["kind"], "items": []}

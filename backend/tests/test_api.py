@@ -17,11 +17,11 @@ def client():
     return TestClient(app)
 
 
-def fake_read(lines, kind="prescription", doctor="Dr A"):
+def fake_read(lines, kind="prescription", doctor="Dr A", date=""):
     def _read(data):
         img = io.BytesIO()
         Image.new("RGB", (400, 300), "white").save(img, "JPEG")
-        return {"kind": kind, "doctor_text": doctor, "date_text": "", "image": img.getvalue(), "size": (400, 300),
+        return {"kind": kind, "doctor_text": doctor, "date_text": date, "image": img.getvalue(), "size": (400, 300),
                 "meta": {"model": "fake"},
                 "items": [{"brand_text": b, "alternatives": [], "strength_text": s, "schedule_text": sch,
                            "handwritten": False, "box": [100, 100, 300, 600], "agree": 1.0} for b, s, sch in lines]}
