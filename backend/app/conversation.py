@@ -19,7 +19,7 @@ from app.core.candidates import Candidate, CandidateIndex, parse_hints
 from app.core.decide import Decider, products_per_brand
 from app.core.graph import ROOT, Graph, brand_key
 from app.core.rerank import distinct_brands, r1, r3
-from app.core.rules import Item, Rules
+from app.core.rules import Item, Rules, site_of
 from app.core.schedule import parse as parse_schedule
 from app.core.settings import DEFAULTS as SETTINGS_DEFAULTS, _merge, load_settings
 
@@ -49,6 +49,16 @@ def _parse_date(text: str) -> tuple | None:
 
 
 EXACT_AGREE = 0.9   # both photo readers wrote (nearly) the same brand text
+
+# Voiced and voiceless partners that speech recognition swaps at the start of a word (টেস heard for ডেস).
+_SOUND_PAIRS = {"t": "d", "d": "t", "k": "g", "g": "k", "p": "b", "b": "p", "c": "j", "j": "c"}
+VOICE_VARIANT_WEIGHT = 0.9  # a sound-alike must be clearly better than what was heard to come first
+
+
+def sound_alikes(name: str) -> list[str]:
+    """The same spoken name with its first letter swapped for its voiced/voiceless partner: 'tes' -> ['des']."""
+    n = (name or "").strip().lower()
+    return [_SOUND_PAIRS[n[0]] + n[1:]] if n and n[0] in _SOUND_PAIRS else []
 
 DEFAULT_POLICY = {"method": "R1+R3", "r1_accept": 0.85, "r1_margin": 0.10, "r2_accept": 0.98, "agree_min": None,
                   "note": "default until E1/R2 sets thresholds"}
@@ -163,6 +173,43 @@ class Engine:
         exact_ok = not handwritten and (crop_parts is None or (agree or 0) >= EXACT_AGREE)
         chosen, conf, method, confirm, cands = self._match(reading, alternatives, crop_parts, handwritten, exact_ok)
         return chosen, conf, method, confirm or bool(self.settings["matching"]["always_confirm"]), cands
+
+    def match_voice(self, said: str, latin: str, strength: str = "") -> tuple:
+        """A spoken name -> (chosen, confidence, method, True, candidates in display order). Each spelling is searched
+        on its own and the results are merged by the decision model's probability: the English letters the model wrote,
+        our own transliteration of the Bangla as said (so a brand the model swapped in cannot hide what was said), and
+        the first-letter sound-alikes (টেস -> Des). A spoken item always waits for the family's tap."""
+        strength = (strength or "").strip()
+        names, keys = [], []
+        for n in (latin, said):
+            k = parse_hints(n or "")[0]
+            if k and k not in keys:
+                names.append(n.strip())
+                keys.append(k)
+        if not names:
+            return None, 0.0, "none", True, []
+        readings = [(f"{n} {strength}".strip(), 1.0) for n in names]
+        readings += [(f"{s} {strength}".strip(), VOICE_VARIANT_WEIGHT) for k in keys for s in sound_alikes(k) if s not in keys]
+        if self.decider is None:
+            chosen, conf, method, _, cands = self.match(readings[0][0], [r for r, _ in readings[1:]], None, False)
+            return chosen, conf, method, True, cands
+        best: dict[str, tuple[Candidate, float]] = {}
+        others: list[Candidate] = []
+        for reading, weight in readings:
+            cands, ranked = self.decider.rank_reading(self.index, reading, [], self.ppb)
+            for c, p in ranked:
+                if c.brand not in best or p * weight > best[c.brand][1]:
+                    best[c.brand] = (c, p * weight)
+            others += cands
+        order = [c for c, _ in sorted(best.values(), key=lambda cp: -cp[1])]
+        shown = {c.brand for c in order}
+        for c in others:
+            if c.brand not in shown:
+                order.append(c)
+                shown.add(c.brand)
+        if not order:
+            return None, 0.0, "none", True, []
+        return order[0], round(best.get(order[0].brand, (None, 0.0))[1], 3), f"voice: {len(readings)} spellings", True, order
 
     def _match(self, reading: str, alternatives: list[str], crop_parts: list | None, handwritten: bool,
                exact_ok: bool = False) -> tuple:
@@ -328,13 +375,11 @@ class Engine:
     def add_voice(self, case: Case, data: bytes, mime: str) -> dict:
         """Voice note -> transcript (shown verbatim) -> medicine mentions -> catalog matcher. Spoken brand names are
         short and easy to mishear (e.g. 'Ace'), so every spoken item waits for the user's one-tap confirmation."""
-        from app.ai.speech import audio_to_text, mentions
+        from app.ai import speech
         t0 = time.time()
-        transcript, meta = audio_to_text(data, mime)
-        case.step("transcribe", t0, model=meta.get("model"), chars=len(transcript))
-        t1 = time.time()
-        found, meta2 = mentions(transcript)
-        case.step("extract", t1, mentions=len(found), model=meta2.get("model"))
+        transcript, found, meta = speech.hear(data, mime)
+        case.step("hear", t0, model=meta.get("model"), chars=len(transcript), mentions=len(found),
+                  fallback=meta.get("fallback"))
         ids, _ = case.new_ids(len(found))
         new, steps = [], []
         for item_id, m in zip(ids, found):
@@ -344,7 +389,7 @@ class Engine:
             alts = [a for a in (said, latin) if a and a != (latin or said)]
             sched_text = m.get("schedule_text", "") or ""
             sched = parse_schedule(sched_text)
-            chosen, conf, method, _, cands = self.match(reading, alts, None, False)
+            chosen, conf, method, _, cands = self.match_voice(said, latin, m.get("strength_text", "") or "")
             ci = CaseItem(item_id, "voice", "voice", said or latin, alts, m.get("strength_text", ""),
                           sched_text, False, None, self._options(cands), chosen.product_id if chosen else None,
                           round(conf, 3), method, True, sched.per_day, sched.to_dict(), None)
@@ -449,6 +494,7 @@ class Engine:
         out_meds = []
         for m in meds:
             out_meds.append({"med_id": m.med_id, "brand": m.brand, "strength": m.strength, "form": m.form,
+                             "applied": site_of(m.form) != "body",   # cream, lotion, drops: 'used', not 'eaten'
                              "path": self.graph.path(m.product_id), "per_day": m.per_day, "from_rx": m.from_rx,
                              "doctors": m.doctors, "taking": m.taking, "monthly_cost": Rules.monthly_cost(m),
                              "checked": m.usable_for_red,   # False: waiting for the family's tap, left out of every rule
@@ -467,7 +513,8 @@ class Engine:
         chosen = None
         if it.product_id:
             p = self.graph.product(it.product_id)
-            chosen = {"product_id": p.id, "brand": p.brand, "strength": p.strength, "form": p.form, "maker": p.manufacturer}
+            chosen = {"product_id": p.id, "brand": p.brand, "strength": p.strength, "form": p.form, "maker": p.manufacturer,
+                      "applied": site_of(p.form) != "body"}
         return {"item_id": it.item_id, "doc_id": it.doc_id, "source": it.source, "reading": it.reading,
                 "alternatives": it.alternatives, "handwritten": it.handwritten, "agree": it.agree, "chosen": chosen,
                 "confidence": it.confidence, "method": it.method, "needs_confirm": it.needs_confirm,

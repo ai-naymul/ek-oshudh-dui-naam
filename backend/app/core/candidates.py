@@ -42,8 +42,22 @@ FORM_WORDS = {"tab": "tablet", "tablet": "tablet", "cap": "capsule", "capsule": 
 _NUM = re.compile(r"(\d+(?:\.\d+)?)")
 
 
+# য়, ড়, ঢ় are stored as a letter plus a dot below (U+09BC), even after NFC; the dot used to stay in the text and split
+# the word ('এক্সিয়াম' -> 'eksij am'). Brand names are English words written in Bangla letters, so the common loan-word
+# spellings map back: ক্স is x (এক্সিয়াম Exium, ম্যাক্সপ্রো Maxpro, ফেক্সো Fexo), িয়া is ia, অ্যা / ্যা is a (অ্যালাট্রল).
+_BN_PAIRS = [("ক্স", "x"), ("িয়া", "ia"), ("য়", "y"), ("ড়", "r"), ("ঢ়", "rh"), ("অ্যা", "a"),
+             ("্যা", "a"), ("্য", ""), ("়", "")]
+# Units said or typed in Bangla, so they are read as units and not as letters of the name ('5 এমজি' -> '5 mg').
+_BN_UNITS = [("মাইক্রোগ্রাম", "mcg"), ("এমসিজি", "mcg"), ("মিলিগ্রাম", "mg"), ("মিগ্রা", "mg"), ("এমজি", "mg"),
+             ("এমএল", "ml"), ("মিলি", "ml"), ("গ্রাম", "g")]
+
+
 def transliterate(text: str) -> str:
     t = unicodedata.normalize("NFC", text or "")
+    for bn, lat in _BN_UNITS:
+        t = re.sub(rf"(?<=[\s0-9০-৯]){bn}\.?(?![ঀ-৿])", " " + lat, t)
+    for bn, lat in _BN_PAIRS:
+        t = t.replace(bn, lat)
     return "".join(BN_MAP.get(ch, ch) for ch in t)
 
 

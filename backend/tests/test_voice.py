@@ -22,6 +22,12 @@ def fake_voice(monkeypatch, transcript, items):
     monkeypatch.setattr(speech, "audio_to_text", lambda data, mime: (transcript, {"model": "fake"}))
     monkeypatch.setattr(speech, "mentions", lambda text: (items, {"model": "fake"}))
 
+    def fake_hear(data, mime):
+        if mime.split(";")[0].strip().lower() not in speech.AUDIO_TYPES:
+            raise ValueError(f"unsupported audio type {mime}")
+        return transcript, items, {"model": "fake", "fallback": False}
+    monkeypatch.setattr(speech, "hear", fake_hear)
+
 
 def test_spoken_medicines_are_matched_but_wait_for_confirmation(client, monkeypatch):
     fake_voice(monkeypatch, "আমি নাপা পাঁচশো দিনে দুইবার খাই", [

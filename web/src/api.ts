@@ -26,7 +26,7 @@ export const shareUrl = () => {
 export type Option = { product_id: number; brand: string; strength: string; form: string; maker: string; generic: string; score: number }
 export type ItemView = {
   item_id: string; doc_id: string; source: string; reading: string; alternatives: string[]; handwritten: boolean
-  agree: number | null; chosen: { product_id: number; brand: string; strength: string; form: string; maker: string } | null
+  agree: number | null; chosen: { product_id: number; brand: string; strength: string; form: string; maker: string; applied?: boolean } | null
   confidence: number; method: string; needs_confirm: boolean; options: Option[]
   schedule: { morning: number | null; noon: number | null; night: number | null; per_day: number | null; meal: string | null; days: number | null }
   per_day: number | null; has_crop: boolean
@@ -38,7 +38,7 @@ export type Taking = 'current' | 'stopped' | 'unsure'
 export type Finding = { rule: string; severity: 'red' | 'amber' | 'info'; title_bn: string; title_en: string; bn: string; en: string; source: string; meds: string[] }
 export type Path = { brand: string; strength: string; form: string; maker: string; ingredients: { name: string; strength: string; class: string | null }[] }
 export type Medicine = {
-  med_id: string; brand: string; strength: string; form: string; path: Path; per_day: number | null; from_rx: boolean
+  med_id: string; brand: string; strength: string; form: string; applied?: boolean; path: Path; per_day: number | null; from_rx: boolean
   doctors: string[]; taking: Taking; checked: boolean; monthly_cost: number | null; cheaper: { brand: string; maker: string; unit_price: number }[]; items: string[]
 }
 export type Stats = {
@@ -118,3 +118,6 @@ export async function shrink(file: File, max = 1600): Promise<Blob> {
 export const bn = (n: number | string) => String(n).replace(/[0-9]/g, (d) => '০১২৩৪৫৬৭৮৯'[Number(d)])
 export const bnInt = (n: number) => bn(n.toLocaleString('en-IN'))
 export const bnPct = (x: number) => `${bn((x * 100).toFixed(1).replace(/\.0$/, ''))}%`
+
+// A cream, lotion or drop is used, not eaten: 'এখন ব্যবহার করছেন' instead of 'এখন খাচ্ছেন'.
+export const statusKey = (o: Taking, applied?: boolean) => (o === 'current' && applied ? 'status.current_applied' : `status.${o}`)

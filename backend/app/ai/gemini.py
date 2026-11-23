@@ -60,8 +60,10 @@ def image_part(path_or_bytes, mime: str | None = None) -> dict:
     return {"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}}
 
 
-def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse) -> tuple[object, dict]:
-    """One generateContent call with retry/backoff; parse(candidate) turns the response into the result."""
+def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse, optional: bool = False) -> tuple[object, dict]:
+    """One generateContent call with retry/backoff; parse(candidate) turns the response into the result.
+    optional: a call the product works without (second reader, R3 pick, direct voice): its failure is not reported as
+    'AI down' by /api/health, so the screen does not warn while the main reader works."""
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise GeminiError("GEMINI_API_KEY is not set")
@@ -94,7 +96,8 @@ def _post(model: str, parts: list, gc: dict, retries: int, timeout: int, parse) 
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
-    _mark(False, f"{model}: {last}")
+    if not optional:
+        _mark(False, f"{model}: {last}")
     raise GeminiError(f"{model} failed: {last}")
 
 
@@ -103,7 +106,7 @@ def _text(cand: dict) -> str:
 
 
 def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, thinking: str | None = "low",
-             retries: int = 3, timeout: int = 120) -> tuple[object, dict]:
+             retries: int = 3, timeout: int = 120, optional: bool = False) -> tuple[object, dict]:
     """Returns (parsed JSON or text, meta={model, seconds, tokens}). Raises GeminiError on hard failure."""
     gc: dict = {"temperature": 0}
     if schema is not None:
@@ -111,7 +114,8 @@ def generate(parts: list, model: str = READ_MODEL, schema: dict | None = None, t
         gc["responseSchema"] = schema
     if thinking and "lite" not in model:
         gc["thinkingConfig"] = {"thinkingLevel": thinking}
-    return _post(model, parts, gc, retries, timeout, lambda c: json.loads(_text(c)) if schema is not None else _text(c))
+    return _post(model, parts, gc, retries, timeout, lambda c: json.loads(_text(c)) if schema is not None else _text(c),
+                 optional)
 
 
 def chat(contents: list, tools: list, model: str = LITE_MODEL, retries: int = 2, timeout: int = 60) -> tuple[dict, dict]:

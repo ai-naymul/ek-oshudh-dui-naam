@@ -2,11 +2,12 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
 import { Recorder } from './Recorder'
-import { ApiError, api, bn, bnInt, shrink, type Health, type ItemView, type Option, type Stats, type Taking } from './api'
+import { ApiError, api, bn, bnInt, shrink, statusKey, type Health, type ItemView, type Option, type Stats, type Taking } from './api'
 import { useCopy, t as tt } from './copy'
 import { Press, aiReady, spring } from './Shell'
 
-type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string } | null
+// For several photos at once: which one is being read (n of 'of') and how many medicines each finished one gave.
+type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string; n?: number; of?: number; done?: number[] } | null
 type Pending = { item: ItemView; index: number; timer: number } | null
 
 function errorText(e: unknown, kind: 'image' | 'voice' | 'text'): string {
@@ -34,6 +35,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const [heard, setHeard] = useState<string[]>([])
   const [repeat, setRepeat] = useState<Blob | null>(null)
   const [pending, setPending] = useState<Pending>(null)
+  const [doneNote, setDoneNote] = useState<string | null>(null)
   const ready = aiReady(health)
   const noKey = health ? !health.ai.key_present : false
   // late answers from a case that is no longer on screen must not land in the new one
@@ -71,6 +73,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const onVoice = useCallback(async (audio: Blob) => {
     setRecording(false)
     setError(null)
+    setDoneNote(null)
     setBusy({ kind: 'voice' })
     try {
       const res = await api.addVoice(caseId, audio)
@@ -82,27 +85,37 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     if (alive.current) setBusy(null)
   }, [caseId, setItems])
 
-  async function addPhoto(blob: Blob, allowRepeat = false) {
+  async function addPhoto(blob: Blob, allowRepeat = false): Promise<number> {
     const res = await api.addImage(caseId, blob, allowRepeat)
-    if (!alive.current) return
-    if (res.duplicate_of) { setRepeat(blob); return }
+    if (!alive.current) return 0
+    if (res.duplicate_of) { setRepeat(blob); return 0 }
     addItems(res.items)
     if (!res.items.length) fail(tt('err.no_items_photo'))
+    return res.items.length
   }
 
   async function onFiles(files: FileList | null) {
     if (!files?.length || busy) return
     setError(null)
     setRepeat(null)
-    for (const f of Array.from(files)) {
+    setDoneNote(null)
+    // Several photos are read one after another; the card says which one is being read and what each finished one
+    // gave, so the first photo's medicines appearing never looks like the second photo was dropped.
+    const list = Array.from(files)
+    const done: number[] = []
+    for (const [k, f] of list.entries()) {
       const preview = URL.createObjectURL(f)
-      setBusy({ kind: 'image', preview })
+      setBusy({ kind: 'image', preview, n: k + 1, of: list.length, done: [...done] })
       let small: Blob | null = null
       try { small = await shrink(f) } catch { fail(tt('err.not_photo')) }   // e.g. a format the browser cannot open
-      if (small) { try { await addPhoto(small) } catch (e) { fail(errorText(e, 'image')) } }
+      let found = 0
+      if (small) { try { found = await addPhoto(small) } catch (e) { fail(errorText(e, 'image')) } }
+      done.push(found)
       URL.revokeObjectURL(preview)
     }
-    if (alive.current) setBusy(null)
+    if (!alive.current) return
+    setBusy(null)
+    if (list.length > 1) setDoneNote(tt('photos.done', { n: bn(list.length), k: bn(done.reduce((a, b) => a + b, 0)) }))
   }
 
   async function addRepeat() {
@@ -117,6 +130,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   async function onText() {
     if (!text.trim() || busy) return
     setError(null)
+    setDoneNote(null)
     setBusy({ kind: 'text' })
     try {
       const res = await api.addText(caseId, text)
@@ -164,6 +178,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <div aria-live="polite" aria-atomic="false">
         {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl bg-danger-soft p-3 text-[1rem] text-danger"><AlertCircle className="mt-1 shrink-0" size={18} />{error}</p>}
         <AnimatePresence>{busy && <Working busy={busy} products={stats?.products} />}</AnimatePresence>
+        {doneNote && !busy && <p role="status" className="mt-4 flex items-start gap-2 rounded-xl bg-rx-soft p-3 text-[1rem] text-rx-deep"><Check className="mt-1 shrink-0" size={18} strokeWidth={3} aria-hidden />{doneNote}</p>}
         <AnimatePresence>
           {repeat && (
             <motion.div className="sheet mt-4 p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
@@ -232,10 +247,16 @@ function Empty() {
 function Working({ busy, products }: { busy: NonNullable<Busy>; products?: number }) {
   const t = useCopy()
   const reduce = useReducedMotion()
-  const title = busy.kind === 'image' ? t('working.image') : busy.kind === 'voice' ? t('working.voice') : t('working.text')
+  const several = busy.kind === 'image' && (busy.of ?? 1) > 1
+  const title = several ? t('working.image_n', { i: bn(busy.n ?? 1), n: bn(busy.of ?? 1) })
+    : busy.kind === 'image' ? t('working.image') : busy.kind === 'voice' ? t('working.voice') : t('working.text')
   const hint = busy.kind === 'image' ? t('working.image_hint', { n: products ? bnInt(products) : '' }) : busy.kind === 'voice' ? t('working.voice_hint') : ''
   return (
-    <motion.div className="sheet lift mt-4 flex items-center gap-4 overflow-hidden p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+    <motion.div className="sheet lift mt-4 overflow-hidden p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+      {several && busy.done?.map((k, j) => (
+        <p key={j} className="mb-2 flex items-center gap-1.5 whitespace-nowrap text-[0.95rem] font-semibold text-rx-deep"><Check size={16} strokeWidth={3} aria-hidden />{t('working.image_done', { i: bn(j + 1), k: bn(k) })}</p>
+      ))}
+      <div className="flex items-center gap-4">
       {busy.preview ? (
         <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-xl bg-paper">
           <img src={busy.preview} alt="" className="h-full w-full object-cover" />
@@ -244,6 +265,7 @@ function Working({ busy, products }: { busy: NonNullable<Busy>; products?: numbe
         </div>
       ) : <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-rx-soft text-rx"><Loader2 className="animate-spin" aria-hidden /></div>}
       <div><p className="text-[1.05rem] font-semibold">{title}</p>{hint && <p className="text-[0.95rem] text-muted">{hint}</p>}</div>
+      </div>
     </motion.div>
   )
 }
@@ -258,19 +280,19 @@ function Tile({ icon, label, hint, onClick, active, disabled }: { icon: React.Re
   )
 }
 
-function StatusChips({ value, onChange, busy }: { value: Taking; onChange: (v: Taking) => void; busy: boolean }) {
+function StatusChips({ value, onChange, busy, applied }: { value: Taking; onChange: (v: Taking) => void; busy: boolean; applied?: boolean }) {
   const t = useCopy()
   const opts: Taking[] = ['current', 'stopped', 'unsure']
   const id = useId()
   return (
     <div className="mt-3">
-      <p id={id} className="mb-1.5 text-[0.95rem] text-muted">{t('status.label')}</p>
+      <p id={id} className="mb-1.5 text-[0.95rem] text-muted">{t(applied ? 'status.label_applied' : 'status.label')}</p>
       <div role="radiogroup" aria-labelledby={id} className="flex flex-wrap gap-2">
         {opts.map((o) => (
           <Press key={o} role="radio" aria-checked={value === o} disabled={busy} onClick={() => onChange(o)}
             className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[0.95rem] font-semibold ring-1 ${value !== o ? 'bg-white text-ink ring-foil'
               : o === 'current' ? 'bg-rx text-white ring-rx' : o === 'stopped' ? 'bg-ink text-white ring-ink' : 'bg-paper text-ink ring-2 ring-muted/50'}`}>
-            {value === o && <Check size={16} strokeWidth={3} aria-hidden />}{t(`status.${o}`)}
+            {value === o && <Check size={16} strokeWidth={3} aria-hidden />}{t(statusKey(o, applied))}
           </Press>
         ))}
       </div>
@@ -331,7 +353,7 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
           onChoose={(pid) => run(() => api.confirm(caseId, it.item_id, pid, it.per_day))}
           onResolve={() => run(() => api.resolve(caseId, it.item_id))} />
       ) : <>
-        <StatusChips value={it.taking} busy={saving} onChange={(v) => run(() => api.status(caseId, it.item_id, v))} />
+        <StatusChips value={it.taking} busy={saving} applied={!!it.chosen?.applied} onChange={(v) => run(() => api.status(caseId, it.item_id, v))} />
         <Press onClick={() => setChanging(true)} className="mt-2 min-h-11 text-[0.95rem] font-semibold text-rx underline-offset-4 hover:underline">{t('item.change')}</Press>
       </>}
       {err && <p role="alert" className="mt-2 text-[0.95rem] text-danger">{err}</p>}
@@ -361,7 +383,7 @@ function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel
     <Press key={o.product_id} disabled={saving} onClick={() => onChoose(o.product_id)}
       className={`print flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 text-left ring-1 ${suggested === o.product_id ? 'bg-rx-soft ring-2 ring-rx' : 'bg-white ring-foil'}`}>
       <span className="min-w-0"><span className="text-[1.1rem] font-semibold">{o.brand}</span> <span className="text-muted">{o.strength}</span>
-        <span className="block truncate text-[0.85rem] text-muted">{o.form}{o.maker ? `, ${o.maker}` : ''}</span></span>
+        <span className="block break-words text-[0.85rem] text-muted">{o.form}{o.maker ? `, ${o.maker}` : ''}</span></span>
       {suggested === o.product_id && <span className="shrink-0 rounded-full bg-rx px-2 py-0.5 text-[0.8rem] font-semibold text-white">{t('abstain.suggested')}</span>}
     </Press>
   )

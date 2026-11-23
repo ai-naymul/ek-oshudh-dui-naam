@@ -263,8 +263,10 @@ def _registry_stats() -> dict:
     from app.core.rules import base_ingredient
     g = engine().graph
     q = g._q
-    counts = {"products": q("SELECT COUNT(*) FROM product")[0][0], "brand_names": q("SELECT COUNT(DISTINCT brand) FROM product")[0][0],
-              "generics": q("SELECT COUNT(DISTINCT generic) FROM product")[0][0]}
+    reg = "WHERE source = 'registry'"   # the registry's own rows; brands added locally are not counted as registry
+    counts = {"products": q(f"SELECT COUNT(*) FROM product {reg}")[0][0],
+              "brand_names": q(f"SELECT COUNT(DISTINCT brand) FROM product {reg}")[0][0],
+              "generics": q(f"SELECT COUNT(DISTINCT generic) FROM product {reg}")[0][0]}
     rows = q("""SELECT i.name, p.brand, COUNT(*) FROM product p
                 JOIN product_ingredient pi ON pi.product_id = p.id JOIN ingredient i ON i.id = pi.ingredient_id
                 WHERE p.id IN (SELECT product_id FROM product_ingredient GROUP BY product_id HAVING COUNT(*) = 1)
@@ -315,4 +317,13 @@ def get_case(case_id: str):
 _DIST = os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")
 if os.path.isdir(_DIST):
     from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=_DIST, html=True), name="web")
+
+    class _WebApp(StaticFiles):
+        """The page itself is always re-checked (a phone that opened the link before kept the old app after an update);
+        the bundled files have content hashes in their names, so those may be cached."""
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            if path in ("", ".", "/", "index.html") or path.endswith(".html"):
+                resp.headers["Cache-Control"] = "no-cache"
+            return resp
+    app.mount("/", _WebApp(directory=_DIST, html=True), name="web")

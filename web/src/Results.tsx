@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AlertTriangle, AlertOctagon, Info, Search, Shuffle, Share2, Loader2, Volume2, Pause, Plus, FileText, ChevronDown, Check } from 'lucide-react'
 import { drawCard, shareCard } from './card'
-import { api, bn, bnPct, type CheckResult, type Finding, type ItemView, type Medicine, type Path, type Taking } from './api'
+import { api, bn, bnPct, statusKey, type CheckResult, type Finding, type ItemView, type Medicine, type Path, type Taking } from './api'
 import { useCopy } from './copy'
 import { Converge, Press, Sheet, spring } from './Shell'
 
@@ -137,12 +137,12 @@ function AskCard({ f, i, meds, caseId, onRecheck }: { f: Finding; i: number; med
         {meds.map((m) => (
           <li key={m.med_id} className="rounded-xl bg-white p-3">
             <p className="print text-[1.1rem] font-semibold">{m.brand} <span className="font-normal text-muted">{m.strength}</span></p>
-            <div role="radiogroup" aria-label={`${m.brand}: ${t('status.label')}`} className="mt-2 flex flex-wrap gap-2">
+            <div role="radiogroup" aria-label={`${m.brand}: ${t(m.applied ? 'status.label_applied' : 'status.label')}`} className="mt-2 flex flex-wrap gap-2">
               {(['current', 'stopped', 'unsure'] as Taking[]).map((o) => (
                 <Press key={o} role="radio" aria-checked={m.taking === o} disabled={!!busy} onClick={() => set(m, o)}
                   className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[0.95rem] font-semibold ring-1 ${m.taking !== o ? 'bg-white ring-foil'
                     : o === 'current' ? 'bg-rx text-white ring-rx' : o === 'stopped' ? 'bg-ink text-white ring-ink' : 'bg-paper ring-2 ring-muted/50'}`}>
-                  {busy === m.med_id ? <Loader2 size={15} className="animate-spin" aria-hidden /> : m.taking === o ? <Check size={15} strokeWidth={3} aria-hidden /> : null}{t(`status.${o}`)}
+                  {busy === m.med_id ? <Loader2 size={15} className="animate-spin" aria-hidden /> : m.taking === o ? <Check size={15} strokeWidth={3} aria-hidden /> : null}{t(statusKey(o, m.applied))}
                 </Press>
               ))}
             </div>
@@ -346,7 +346,7 @@ function TryBrand() {
         <div className="mt-3 rounded-xl bg-paper p-3">
           {hit.path ? <>
             <p><span className="hand text-[1.2rem]">{hit.title}</span> <span className="text-muted">→</span> <span className="print font-semibold">{hit.path.brand} {hit.path.strength}</span></p>
-            <p className="print text-[0.95rem] text-muted">{hit.path.form}, {hit.path.maker}</p>
+            <p className="print text-[0.95rem] text-muted">{[hit.path.form, hit.path.maker].filter(Boolean).join(', ')}</p>
             <p className="mt-1"><span className="text-muted">{t('meds.inside')}: </span><span className="print">{hit.path.ingredients.map((x) => x.name).join(' + ')}</span></p>
           </> : <p>{t('how.not_found')}</p>}
           {hit.id && <p className="print mt-1 text-[0.85rem] text-muted">request {hit.id}, {hit.ms} ms</p>}

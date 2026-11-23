@@ -38,7 +38,8 @@ same Wi-Fi.
 photos / voice / typed
   → 1 READ      Gemini 3.8 Flash reads each line into a strict schema (name, alternatives, strength, schedule,
                 a box around the whole line); Gemini 3.1 Flash-Lite reads the same photo in parallel as a
-                second opinion on the names; voice notes are transcribed (gemini-3.5-transcribe)
+                second opinion on the names; a voice note goes straight to Gemini 3.8 Flash, which returns the
+                transcript and the names said (fallback: gemini-3.5-transcribe, then Flash-Lite lists the names)
   → 2 FIND      candidates from the national registry: character n-gram TF-IDF + edit distance + phonetic key
                 + Bangla→Latin transliteration + local spellings (data/curated/aliases_local.csv)
   → 3 DECIDE    a trained LightGBM decision model ranks the candidates (14 explainable features) and accepts
@@ -112,7 +113,7 @@ with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cas
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 185 tests, no API key needed (also run in CI on every push)
+cd backend && uv run pytest -q          # 204 tests, no API key needed (also run in CI on every push)
 cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
@@ -134,6 +135,7 @@ shown as an all-clear, every verdict heading on one line, and no sideways scroll
 | Ask for confirmation on every line; accept threshold | `config/settings.json` → `matching` | yes |
 | Switch a rule on or off (dose limits, "not on prescription") | `config/settings.json` → `rules` | yes |
 | A local spelling of a brand | `data/curated/aliases_local.csv` | yes |
+| A brand missing from the registry (with a source link) | `data/curated/products_local.csv`, then rebuild the graph | yes |
 | A risky pair, a drug family, a dose limit | `data/curated/*.csv` (with the source sentence) | yes |
 | The sample case | `config/settings.json` → `sample_case` | yes |
 

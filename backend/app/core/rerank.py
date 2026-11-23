@@ -57,7 +57,8 @@ def r3(image_parts: list, cands: list[Candidate], k: int = 5, model: str | None 
               f"Which of these registered medicine names is written? Answer with its number, or 0 if none fits.\n{listing}\n"
               "Also give your confidence from 0 to 1.")
     # a second opinion only: a short limit and no retry; if it fails, the family is asked (Engine._safe_r3)
-    out, meta = generate(image_parts + [{"text": prompt}], model=model or LITE_MODEL, schema=R3_SCHEMA, retries=0, timeout=20)
+    out, meta = generate(image_parts + [{"text": prompt}], model=model or LITE_MODEL, schema=R3_SCHEMA, retries=0, timeout=20,
+                         optional=True)
     n = int(out.get("choice", 0))
     chosen = options[n - 1] if 1 <= n <= len(options) else None
     return Choice(chosen, float(out.get("confidence", 0.0)), "R3", {"options": [c.brand for c in options], **meta})

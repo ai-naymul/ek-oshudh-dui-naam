@@ -16,7 +16,7 @@ def test_a_slow_second_reader_does_not_hold_up_the_photo(monkeypatch):
     import app.ai.perceive as perceive
     answer = {"kind": "strip", "items": [{"brand_text": "Napa", "box": [0, 0, 1000, 1000]}]}
 
-    def fake_generate(parts, model, schema=None, thinking=None, retries=0, timeout=0):
+    def fake_generate(parts, model, schema=None, thinking=None, retries=0, timeout=0, optional=False):
         if model == perceive.LITE_MODEL:
             time.sleep(3)
         return answer, {"model": model}
@@ -33,7 +33,7 @@ def test_the_photo_reader_and_the_second_opinion_have_short_time_limits(monkeypa
     import app.core.rerank as rerank
     seen = []
 
-    def spy(parts, model, schema=None, thinking=None, retries=3, timeout=120):
+    def spy(parts, model, schema=None, thinking=None, retries=3, timeout=120, optional=False):
         seen.append((model, retries, timeout))
         return {"kind": "strip", "items": [], "choice": 0}, {}
     monkeypatch.setattr(perceive, "generate", spy)

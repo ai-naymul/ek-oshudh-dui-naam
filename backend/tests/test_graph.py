@@ -19,9 +19,24 @@ def built(tmp_path_factory):
 
 def test_counts_match_dataset(built):
     stats, _ = built
-    assert stats["products"] == 21363
+    assert stats["products"] == 21363          # the registry's own rows; local additions are counted apart
     assert stats["brand_names"] == 13627
     assert stats["generics"] == 1508
+
+
+def test_a_brand_missing_from_the_registry_is_added_from_the_curated_file(built):
+    # Candifast SB 65 mg (itraconazole) was on a real prescription and is not in the registry snapshot
+    stats, gr = built
+    assert stats["local_products"] >= 1
+    p = gr.products_by_brand("Candifast SB")
+    assert p and (p[0].generic, p[0].strength, p[0].form) == ("Itraconazole", "65 mg", "Capsule")
+    assert [n for n, _, _ in gr.ingredients(p[0].id)] == ["Itraconazole"]
+
+
+def test_every_local_product_names_its_source():
+    import csv
+    rows = list(csv.DictReader(open(os.path.join(g.ROOT, "data", "curated", "products_local.csv"), encoding="utf-8")))
+    assert rows and all(r["source"].startswith("http") and r["generic"] and r["strength"] for r in rows)
 
 
 def test_brands_map_to_their_ingredient(built):
@@ -52,3 +67,11 @@ def test_path_explains_brand_to_class(built):
     path = gr.path(p.id)
     assert path["ingredients"][0]["name"] == "Omeprazole"
     assert path["ingredients"][0]["class"]
+
+
+@pytest.mark.skipif(not os.path.exists(g.DB_PATH), reason="graph not built")
+def test_the_prescription_line_finds_the_added_brand():
+    from app.conversation import Engine
+    for line in ["Candifast SB 65mg", "Cap. Candifast SB 65 mg", "Candifast"]:
+        chosen, *_ = Engine().match(line, [], None, False)
+        assert chosen and chosen.brand == "Candifast SB", (line, chosen and chosen.brand)

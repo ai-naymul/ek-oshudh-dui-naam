@@ -100,3 +100,10 @@ def test_stats_are_computed_from_the_registry(client):
     para = next(e for e in s["examples"] if e["ingredient"] == "Paracetamol")
     assert para["brand_count"] > 100 and "Napa" in para["brands"] and len(para["brands"]) <= 8
     assert s["examples"] == sorted(s["examples"], key=lambda e: -e["brand_count"])
+
+
+@pytest.mark.skipif(not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")), reason="web not built")
+def test_the_app_page_is_never_served_from_an_old_cache(client):
+    # A phone that opened the link before kept the old page (and so the old app) after an update.
+    r = client.get("/")
+    assert r.status_code == 200 and "no-cache" in r.headers.get("cache-control", "")

@@ -99,7 +99,7 @@ def read_image(data: bytes) -> dict:
     small, size = _resize(data)
     parts = [image_part(small, "image/jpeg"), {"text": PROMPT}]
     main_f = _readers.submit(generate, parts, READ_MODEL, SCHEMA, "low", READ_RETRIES, READ_TIMEOUT)
-    lite_f = _readers.submit(generate, parts, LITE_MODEL, SCHEMA, None, READ_RETRIES, READ_TIMEOUT)
+    lite_f = _readers.submit(generate, parts, LITE_MODEL, SCHEMA, None, READ_RETRIES, READ_TIMEOUT, optional=True)
     lite = None
     try:
         main, meta = main_f.result()

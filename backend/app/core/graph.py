@@ -18,12 +18,15 @@ from dataclasses import dataclass
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 RAW = os.path.join(ROOT, "data", "raw")
+# Brands missing from the registry snapshot, each row with its source (a pharmacy listing): data/curated/products_local.csv
+LOCAL_PRODUCTS = os.path.join(ROOT, "data", "curated", "products_local.csv")
 DB_PATH = os.path.join(ROOT, "data", "build", "graph.sqlite")
 
 SCHEMA = """
 CREATE TABLE product (
   id INTEGER PRIMARY KEY, brand TEXT NOT NULL, brand_key TEXT NOT NULL, generic TEXT NOT NULL,
-  strength TEXT, form TEXT, manufacturer TEXT, unit_price REAL, package TEXT);
+  strength TEXT, form TEXT, manufacturer TEXT, unit_price REAL, package TEXT,
+  source TEXT NOT NULL DEFAULT 'registry');
 CREATE TABLE ingredient (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
 CREATE TABLE product_ingredient (
   product_id INTEGER NOT NULL, ingredient_id INTEGER NOT NULL, strength TEXT, mg REAL,
@@ -97,6 +100,19 @@ def build(raw_dir: str = RAW, db_path: str = DB_PATH) -> dict:
                     ing_ids[name] = con.execute("INSERT INTO ingredient (name) VALUES (?)", (name,)).lastrowid
                 con.execute("INSERT OR IGNORE INTO product_ingredient VALUES (?,?,?,?)",
                             (pid, ing_ids[name], strength, to_mg(strength)))
+    if os.path.exists(LOCAL_PRODUCTS):
+        with open(LOCAL_PRODUCTS, encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                cur = con.execute(
+                    "INSERT INTO product (brand, brand_key, generic, strength, form, manufacturer, unit_price, package, source) "
+                    "VALUES (?,?,?,?,?,?,NULL,'',?)",
+                    (r["brand name"].strip(), brand_key(r["brand name"]), r["generic"].strip(), r["strength"].strip(),
+                     r["dosage form"].strip(), r["manufacturer"].strip(), "local"))
+                for name, strength in split_combination(r["generic"], r["strength"]):
+                    if name not in ing_ids:
+                        ing_ids[name] = con.execute("INSERT INTO ingredient (name) VALUES (?)", (name,)).lastrowid
+                    con.execute("INSERT OR IGNORE INTO product_ingredient VALUES (?,?,?,?)",
+                                (cur.lastrowid, ing_ids[name], strength, to_mg(strength)))
     with open(os.path.join(raw_dir, "generic.csv"), encoding="utf-8", errors="replace") as f:
         for r in csv.DictReader(f):
             con.execute("INSERT OR REPLACE INTO generic_info VALUES (?,?,?,?,?,?,?,?)",
@@ -106,9 +122,10 @@ def build(raw_dir: str = RAW, db_path: str = DB_PATH) -> dict:
                          clean_html(r["overdose effects description"])))
     con.commit()
     stats = dict(
-        products=con.execute("SELECT COUNT(*) FROM product").fetchone()[0],
-        brand_names=con.execute("SELECT COUNT(DISTINCT brand) FROM product").fetchone()[0],
-        generics=con.execute("SELECT COUNT(DISTINCT generic) FROM product").fetchone()[0],
+        products=con.execute("SELECT COUNT(*) FROM product WHERE source = 'registry'").fetchone()[0],
+        brand_names=con.execute("SELECT COUNT(DISTINCT brand) FROM product WHERE source = 'registry'").fetchone()[0],
+        generics=con.execute("SELECT COUNT(DISTINCT generic) FROM product WHERE source = 'registry'").fetchone()[0],
+        local_products=con.execute("SELECT COUNT(*) FROM product WHERE source = 'local'").fetchone()[0],
         ingredients=con.execute("SELECT COUNT(*) FROM ingredient").fetchone()[0],
         priced=con.execute("SELECT COUNT(*) FROM product WHERE unit_price IS NOT NULL").fetchone()[0],
     )
