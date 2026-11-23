@@ -68,7 +68,7 @@ photos / voice / typed
 
 ## How well does the matching work?
 
-Measured on real handwriting by Bangladeshi doctors (public dataset, 78 medicine names): thresholds were chosen on a
+Measured on real handwriting by Bangladeshi doctors: the public *Doctor's Handwritten Prescription BD* dataset (Mendeley; 4,680 word images of 78 medicine names, split 3,120 train / 780 validation / 780 test; see `data/LICENSES.md`): thresholds were chosen on a
 validation split of 780 words and reported once on a separate test split of 780 words the models never saw
 (`eval/reports/e1_policy_gemini-3.8-flash.json`, `models/policy.json`).
 
