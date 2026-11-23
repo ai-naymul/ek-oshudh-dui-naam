@@ -37,7 +37,8 @@ same Wi-Fi.
 ```
 photos / voice / typed
   → 1 READ      Gemini 3.8 Flash reads each line into a strict schema (name, alternatives, strength, schedule,
-                a box around the whole line); voice notes are transcribed (gemini-3.5-transcribe)
+                a box around the whole line); Gemini 3.1 Flash-Lite reads the same photo in parallel as a
+                second opinion on the names; voice notes are transcribed (gemini-3.5-transcribe)
   → 2 FIND      candidates from the national registry: character n-gram TF-IDF + edit distance + phonetic key
                 + Bangla→Latin transliteration + local spellings (data/curated/aliases_local.csv)
   → 3 DECIDE    a trained LightGBM decision model ranks the candidates (14 explainable features) and accepts
@@ -68,8 +69,10 @@ photos / voice / typed
 
 ## How well does the matching work?
 
-Measured on real handwriting by Bangladeshi doctors: the public *Doctor's Handwritten Prescription BD* dataset (Mendeley; 4,680 word images of 78 medicine names, split 3,120 train / 780 validation / 780 test; see `data/LICENSES.md`): thresholds were chosen on a
-validation split of 780 words and reported once on a separate test split of 780 words the models never saw
+Measured on real handwriting by Bangladeshi doctors: the public *Doctor's Handwritten Prescription BD* dataset
+(Mendeley; 4,680 word images of 78 medicine names, split by its authors into 3,120 train / 780 validation / 780 test;
+`scripts/get_handwriting.py` downloads it, see `data/LICENSES.md`). The decision model was trained on the train split,
+thresholds were chosen on the validation split, and results are reported once on the test split the models never saw
 (`eval/reports/e1_policy_gemini-3.8-flash.json`, `models/policy.json`).
 
 | Matcher (Gemini 3.8 Flash reader) | Top-1 correct (dataset labels) | After label audit |
@@ -109,7 +112,7 @@ with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cas
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 154 tests, no API key needed (also run in CI on every push)
+cd backend && uv run pytest -q          # 185 tests, no API key needed (also run in CI on every push)
 cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
