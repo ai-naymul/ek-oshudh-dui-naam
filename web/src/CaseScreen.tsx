@@ -323,15 +323,16 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
 
   return (
     <article className="sheet p-4" aria-label={it.chosen?.brand ?? it.reading}>
+      {/* the source (which prescription, or the bag) gets its own full-width line: a long doctor's name is never cut off */}
       <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate rounded-full bg-paper px-3 py-1 text-[0.85rem] text-muted">{where}</span>
         <div className="flex shrink-0 items-center gap-1">
           {it.needs_confirm ? <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[0.85rem] font-semibold text-warn"><CircleHelp size={14} aria-hidden />{t('steps.confirm')}</span>
             : it.chosen ? <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-rx-soft px-2.5 py-1 text-[0.85rem] font-semibold text-rx"><Check size={14} strokeWidth={3} aria-hidden />{t('item.matched')}</span>
             : <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-[0.85rem] font-semibold text-danger"><CircleHelp size={14} aria-hidden />{t('item.not_found')}</span>}
-          <Press onClick={onRemove} aria-label={`${t('item.remove')}: ${it.chosen?.brand ?? it.reading}`} className="grid h-11 w-11 place-items-center rounded-full text-muted"><Trash2 size={18} /></Press>
         </div>
+        <Press onClick={onRemove} aria-label={`${t('item.remove')}: ${it.chosen?.brand ?? it.reading}`} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted"><Trash2 size={18} /></Press>
       </div>
+      <p className="mt-1 break-words text-[0.9rem] text-muted">{where}</p>
       {it.has_crop && cropOk && (
         <div className="mt-3 flex h-16 items-center overflow-hidden rounded-lg bg-white ring-1 ring-foil">
           <img src={api.cropUrl(caseId, it.item_id)} onError={() => setCropOk(false)} alt={`${said}: ${it.reading}`} className="block h-full w-auto max-w-full object-contain object-left" />

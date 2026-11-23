@@ -6,9 +6,17 @@ import { useCopy } from './copy'
 import { Converge, Press, spring } from './Shell'
 
 // Numbers come from /api/stats (the registry and models/policy.json). The example is chosen by the person, not rotated.
+const MAX_BRAND = 9, MAX_INGREDIENT = 20
+
 export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | null; onStart: () => void; onSample: () => void; busy: boolean }) {
   const t = useCopy()
-  const examples = stats?.examples.filter((e) => e.brands.length >= 2) ?? []
+  // Two names in a large handwriting font, side by side on a phone: only names that fit are shown (nothing is cut off
+  // with '…'), and Paracetamol comes first, the medicine everyone knows (Napa, Ace).
+  const examples = (stats?.examples ?? [])
+    .filter((e) => e.ingredient.length <= MAX_INGREDIENT)
+    .map((e) => ({ ...e, brands: e.brands.filter((b) => b.length <= MAX_BRAND) }))
+    .filter((e) => e.brands.length >= 2)
+    .sort((a, b) => Number(b.ingredient === 'Paracetamol') - Number(a.ingredient === 'Paracetamol'))
   const [i, setI] = useState(0)
   const ex = examples.length ? examples[((i % examples.length) + examples.length) % examples.length] : null
   const lead = stats?.examples.find((e) => e.ingredient === 'Paracetamol') ?? stats?.examples[0]
@@ -36,8 +44,8 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
         <div className="mt-4 min-h-[190px] rounded-xl bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_37px,rgba(36,64,142,0.08)_37px,rgba(36,64,142,0.08)_38px)] px-2 py-3">
           {ex ? (
             <Converge key={ex.ingredient} ingredient={ex.ingredient}
-              left={<span className="hand truncate text-[1.7rem] leading-none" title={ex.brands[0]}>{ex.brands[0]}</span>}
-              right={<span className="hand truncate text-[1.7rem] leading-none" title={ex.brands[1]}>{ex.brands[1]}</span>} />
+              left={<span className="hand whitespace-nowrap text-[1.7rem] leading-none">{ex.brands[0]}</span>}
+              right={<span className="hand whitespace-nowrap text-[1.7rem] leading-none">{ex.brands[1]}</span>} />
           ) : <div className="grid h-[170px] place-items-center"><Loader2 className="animate-spin text-rx" /></div>}
         </div>
         {ex && (
