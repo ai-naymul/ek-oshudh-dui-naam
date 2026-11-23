@@ -1,0 +1,64 @@
+{
+ "reader": "gemini-3.8-flash",
+ "rule": "threshold on validation: 95% upper bound of wrong auto-accepts <= 2%",
+ "training_rows": 104269,
+ "n_validation": 780,
+ "n_test": 780,
+ "models": {
+  "LightGBM (shipped model file)": {
+   "top1_test": 0.868,
+   "top1_test_audited": 0.881,
+   "threshold": 0.98,
+   "auto_accept": 0.542,
+   "wrong_auto": 12,
+   "accepted": 423,
+   "wrong_auto_audited": 2,
+   "right_in_top3_if_asked": 0.84,
+   "train_seconds": 0.0
+  },
+  "LightGBM (retrained here)": {
+   "top1_test": 0.873,
+   "top1_test_audited": 0.886,
+   "threshold": 0.98,
+   "auto_accept": 0.549,
+   "wrong_auto": 12,
+   "accepted": 428,
+   "wrong_auto_audited": 2,
+   "right_in_top3_if_asked": 0.835,
+   "train_seconds": 1.2
+  },
+  "Logistic regression": {
+   "top1_test": 0.851,
+   "top1_test_audited": 0.864,
+   "threshold": 0.99,
+   "auto_accept": 0.462,
+   "wrong_auto": 10,
+   "accepted": 360,
+   "wrong_auto_audited": 2,
+   "right_in_top3_if_asked": 0.833,
+   "train_seconds": 0.1
+  },
+  "Random forest": {
+   "top1_test": 0.85,
+   "top1_test_audited": 0.863,
+   "threshold": 0.98,
+   "auto_accept": 0.482,
+   "wrong_auto": 7,
+   "accepted": 376,
+   "wrong_auto_audited": 1,
+   "right_in_top3_if_asked": 0.839,
+   "train_seconds": 2.6
+  },
+  "Neural network (MLP 32-16)": {
+   "top1_test": 0.868,
+   "top1_test_audited": 0.881,
+   "threshold": 0.99,
+   "auto_accept": 0.41,
+   "wrong_auto": 8,
+   "accepted": 320,
+   "wrong_auto_audited": 1,
+   "right_in_top3_if_asked": 0.859,
+   "train_seconds": 2.4
+  }
+ }
+}

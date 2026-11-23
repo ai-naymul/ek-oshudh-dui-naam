@@ -91,6 +91,10 @@ thresholds were chosen on the validation split, and results are reported once on
   changing the ingredient, which is why the photo line is always shown. Only disagreements were audited, so the
   audited figure is a best case; raw figures are always reported beside it.
 - On 26 medicine names the decision model never saw in training: R2 80.4% vs R1 76.9% (Flash-Lite reader).
+- Why LightGBM (`eval/reports/model_comparison.json`, `training/compare_models.py`): the same 14 features, training rows
+  and 2% rule with other models. Top-1 on the 780 test words: LightGBM 86.8%, logistic regression 85.1%, random forest
+  85.0%, a small neural network 86.8%. Accepted without asking at the 2% bound: LightGBM 54.2%, the others 41.0-48.2%.
+  The features carry the ranking; LightGBM lets the most words through safely. (Other models with default settings.)
 
 These numbers measure name matching on word images, not the whole path from a phone photo to a warning.
 
