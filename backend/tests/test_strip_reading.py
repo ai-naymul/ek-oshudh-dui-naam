@@ -59,3 +59,41 @@ def test_the_typing_example_matches_without_asking():
     from app.conversation import Engine
     chosen, _, _, confirm, _ = Engine().match("Seclo 20 রাতে", [], None, False)
     assert chosen.brand == "Seclo" and confirm is False
+
+
+def test_one_strip_photo_lists_each_product_once(monkeypatch):
+    """A strip prints its name many times, in English and Bangla (22 Nov: one Sergel MUPS strip came back as 4 items)."""
+    if not os.path.exists(g.DB_PATH):
+        pytest.skip("graph not built")
+    from fastapi.testclient import TestClient
+    import app.ai.perceive as perceive
+    from app.main import app
+    from tests.test_api import fake_read
+    from tests.test_robustness import jpg
+    client = TestClient(app)
+    monkeypatch.setattr(perceive, "read_image", fake_read([("Sergel MUPS", "20 mg", ""), ("Sergel MUPS", "20 mg", ""),
+                                                          ("Sergel MUPS", "20 mg", "")], kind="strip"))
+    cid = client.post("/api/cases").json()["case_id"]
+    out = client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")}).json()
+    assert len(out["items"]) == 1 and out["items"][0]["chosen"]["brand"] == "Sergel MUPS"
+
+
+def test_two_different_strips_in_one_photo_stay_two(monkeypatch):
+    if not os.path.exists(g.DB_PATH):
+        pytest.skip("graph not built")
+    from fastapi.testclient import TestClient
+    import app.ai.perceive as perceive
+    from app.main import app
+    from tests.test_api import fake_read
+    from tests.test_robustness import jpg
+    client = TestClient(app)
+    monkeypatch.setattr(perceive, "read_image", fake_read([("Napa", "500 mg", ""), ("Ace", "500 mg", ""), ("Napa", "500 mg", "")],
+                                                          kind="strip"))
+    cid = client.post("/api/cases").json()["case_id"]
+    out = client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")}).json()
+    assert sorted(i["chosen"]["brand"] for i in out["items"]) == ["Ace", "Napa"]
+
+
+def test_the_reader_is_told_a_strip_shows_one_product_many_times():
+    from app.ai.perceive import PROMPT
+    assert "ONCE" in PROMPT and "generic_text" in PROMPT

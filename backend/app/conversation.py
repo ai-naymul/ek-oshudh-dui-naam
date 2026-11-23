@@ -279,10 +279,24 @@ class Engine:
             new.append(ci)
             steps.append(("match", t1, dict(item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
                                              chosen=self.options_brand(ci))))
+        if source == "strip":
+            new = self._one_per_product(new)
         # only now, when every line was read and matched, does the photo become part of the case (all or nothing)
         self._commit(case, new, steps, doc={"doc_id": doc_id, "kind": read["kind"], "doctor": read.get("doctor_text") or doc_id,
                                             "date": read.get("date_text") or "", "sig": sig})
         return {"doc_id": doc_id, "duplicate_of": None, "kind": read["kind"], "items": [self.item_view(i) for i in new]}
+
+    @staticmethod
+    def _one_per_product(items: list) -> list:
+        """One strip photo shows one product printed many times (English, Bangla, again on every blister): list each
+        product once, keeping the reading the matcher was surest of. Different products in one photo stay apart."""
+        best: dict = {}
+        for ci in items:
+            key = ci.product_id if ci.product_id is not None else ("unmatched", ci.reading.lower())
+            if key not in best or (best[key].needs_confirm and not ci.needs_confirm):
+                best[key] = ci
+        kept = {id(ci) for ci in best.values()}
+        return [ci for ci in items if id(ci) in kept]
 
     @staticmethod
     def _commit(case: Case, new: list, steps: list, doc: dict | None = None) -> None:

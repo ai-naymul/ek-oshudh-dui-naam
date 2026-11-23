@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 
 from PIL import Image
 from rapidfuzz import fuzz
@@ -27,6 +28,9 @@ For each medicine line give:
 - expiry_text if printed (strips/boxes)
 - handwritten: true if this line is handwritten
 - box: [ymin, xmin, ymax, xmax] around the WHOLE written line or label for this medicine (number, form, name, strength and schedule), scaled 0-1000
+For a strip or box: the same medicine is printed many times, in English and in Bangla, often with its ingredients.
+Give each different medicine product ONCE: brand_text is the brand name in English letters (the Bangla name only if no
+English one is printed); put ingredient names in generic_text, never as separate medicines.
 Also give kind and, for prescriptions, doctor_text (doctor or clinic name only) and date_text."""
 
 SCHEMA = {
@@ -83,25 +87,33 @@ def name_agreement(text: str, others: list[str]) -> float:
     return round(best / 100, 2)
 
 
+# A judge or a family must never wait minutes for one photo: the main reader gets 45 s and one retry, and the optional
+# second reader (it only checks the names) gets at most SECOND_READER_WAIT seconds more after the first has answered.
+READ_TIMEOUT, READ_RETRIES, SECOND_READER_WAIT = 45, 1, 8
+_readers = ThreadPoolExecutor(8)
+
+
 def read_image(data: bytes) -> dict:
-    """Returns {kind, doctor_text, date_text, items[...] with 'agree' added, image (resized bytes), meta}."""
+    """Returns {kind, doctor_text, date_text, items[...] with 'agree' added, image (resized bytes), meta}.
+    'agree' is None when the second reader was too slow: then an exact name from this photo is asked, not accepted."""
     small, size = _resize(data)
     parts = [image_part(small, "image/jpeg"), {"text": PROMPT}]
-    with ThreadPoolExecutor(2) as ex:
-        main_f = ex.submit(generate, parts, READ_MODEL, SCHEMA, "low")
-        lite_f = ex.submit(generate, parts, LITE_MODEL, SCHEMA, None)
+    main_f = _readers.submit(generate, parts, READ_MODEL, SCHEMA, "low", READ_RETRIES, READ_TIMEOUT)
+    lite_f = _readers.submit(generate, parts, LITE_MODEL, SCHEMA, None, READ_RETRIES, READ_TIMEOUT)
+    lite = None
+    try:
+        main, meta = main_f.result()
+    except GeminiError:
+        main, meta = lite_f.result()  # fallback reader
+        meta["fallback"] = True
+    else:
         try:
-            main, meta = main_f.result()
-        except GeminiError:
-            main, meta = lite_f.result()  # fallback reader
-            meta["fallback"] = True
-        try:
-            lite, _ = lite_f.result()
-        except GeminiError:
-            lite = {"items": []}
-    lite_texts = [i.get("brand_text", "") for i in lite.get("items", [])]
+            lite, _ = lite_f.result(timeout=SECOND_READER_WAIT)
+        except (GeminiError, FuturesTimeout):
+            lite = None
+    lite_texts = [i.get("brand_text", "") for i in lite.get("items", [])] if lite else None
     for it in main.get("items", []):
-        it["agree"] = name_agreement(it.get("brand_text", ""), lite_texts)
+        it["agree"] = name_agreement(it.get("brand_text", ""), lite_texts) if lite_texts is not None else None
     return {"kind": main.get("kind", "other"), "doctor_text": main.get("doctor_text", ""),
             "date_text": main.get("date_text", ""), "items": main.get("items", []), "image": small,
             "size": size, "meta": meta}
