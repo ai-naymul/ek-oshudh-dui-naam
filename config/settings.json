@@ -1,5 +1,5 @@
 {
-  "_about": "Switches you can change on-site; restart the server after editing. Only the keys written here override the defaults in backend/app/core/settings.py. sample_case: lines for the labelled sample ('Rx:' = from a prescription); its matches and findings are computed live.",
+  "_about": "Switches you can change on-site; restart the server after editing. Only the keys written here override the defaults in backend/app/core/settings.py. sample_case: lines for the labelled sample ('Rx:' = from a prescription); its matches and findings are computed live. welcome_pairs: brand pairs the welcome screen shows first (from the story); each pair is checked in the registry and left out if the two do not share an ingredient.",
   "matching": {
     "auto_accept_threshold": null,
     "always_confirm": false
@@ -13,5 +13,19 @@
     "Rx: Napa 500 1+0+1",
     "Ace 500 0+0+1",
     "Seclo 20 0+0+1"
+  ],
+  "welcome_pairs": [
+    [
+      "Napa",
+      "Ace"
+    ],
+    [
+      "Alatrol",
+      "Atrizin"
+    ],
+    [
+      "Exium",
+      "Sergel"
+    ]
   ]
 }

@@ -20,6 +20,8 @@ DEFAULTS = {
     "rules": dict(RULE_DEFAULTS),
     # lines for the labelled sample case ("Rx:" = from a prescription); matches and findings are computed live
     "sample_case": ["Rx: Napa 500 1+0+1", "Ace 500 0+0+1", "Seclo 20 0+0+1"],
+    # brand pairs the welcome screen shows first (the ones in the story); each pair is checked in the registry
+    "welcome_pairs": [["Napa", "Ace"], ["Alatrol", "Atrizin"], ["Exium", "Sergel"]],
 }
 
 

@@ -99,7 +99,8 @@ def test_stats_are_computed_from_the_registry(client):
     assert s["products"] == 21363 and s["brand_names"] == 13627
     para = next(e for e in s["examples"] if e["ingredient"] == "Paracetamol")
     assert para["brand_count"] > 100 and "Napa" in para["brands"] and len(para["brands"]) <= 8
-    assert s["examples"] == sorted(s["examples"], key=lambda e: -e["brand_count"])
+    rest = s["examples"][3:]                    # after the three story pairs (tests/test_welcome_pairs.py)
+    assert rest == sorted(rest, key=lambda e: -e["brand_count"])
 
 
 @pytest.mark.skipif(not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")), reason="web not built")

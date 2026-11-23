@@ -275,10 +275,34 @@ def _registry_stats() -> dict:
     for name, brand, n in rows:
         d = by.setdefault(base_ingredient(name).title(), {})
         d[brand] = d.get(brand, 0) + n
-    top = sorted(by.items(), key=lambda kv: -len(kv[1]))[:8]
-    examples = [{"ingredient": ing, "brand_count": len(brands),
-                 "brands": [b for b, _ in sorted(brands.items(), key=lambda kv: (-kv[1], kv[0]))[:8]]} for ing, brands in top]
+    featured = featured_examples(engine().settings.get("welcome_pairs") or [], by)
+    shown = {e["ingredient"] for e in featured}
+    top = [kv for kv in sorted(by.items(), key=lambda kv: -len(kv[1])) if kv[0] not in shown][:8]
+    examples = featured + [{"ingredient": ing, "brand_count": len(brands), "brands": _by_count(brands)[:8]}
+                           for ing, brands in top]
     return {**counts, "examples": examples}
+
+
+def _by_count(brands: dict[str, int]) -> list[str]:
+    return [b for b, _ in sorted(brands.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def featured_examples(pairs: list, by: dict[str, dict[str, int]]) -> list[dict]:
+    """The welcome pairs from settings (the brands in the story), each checked in the registry: both brands must be
+    single-ingredient products with the same ingredient. The ingredient and the brand count are looked up, never typed;
+    a pair that does not share an ingredient is left out."""
+    out = []
+    for pair in pairs:
+        if len(pair) != 2:
+            continue
+        for ing, brands in by.items():
+            names = {b.lower(): b for b in brands}
+            a, b = (names.get(str(x).lower()) for x in pair)
+            if a and b and a != b and ing not in {e["ingredient"] for e in out}:
+                out.append({"ingredient": ing, "brand_count": len(brands),
+                            "brands": [a, b] + [x for x in _by_count(brands) if x not in (a, b)][:6]})
+                break
+    return out
 
 
 @app.get("/api/stats")

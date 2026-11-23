@@ -102,3 +102,28 @@ test('every verdict heading fits on one line', async ({ page }) => {
   })
   for (const l of lines) expect(l.lines, l.text).toBe(1)
 })
+
+// The welcome example plays by itself (the story's pairs first) so it draws the eye while the team talks; it can be
+// paused, and it never moves for someone who asked the system to reduce motion.
+test('welcome example: story pairs first, moves on by itself, can be paused', async ({ page }) => {
+  await page.goto('/')
+  const card = page.locator('section').first()
+  await expect(card.getByText('Napa', { exact: true })).toBeVisible()
+  await expect(card.getByText('Paracetamol', { exact: true })).toBeVisible()
+  await expect(card.getByText('Alatrol', { exact: true })).toBeVisible({ timeout: 9000 })
+  await expect(card.getByText('Cetirizine', { exact: true })).toBeVisible()
+  await card.getByRole('button', { name: 'উদাহরণ থামান' }).click()
+  await page.waitForTimeout(6500)
+  await expect(card.getByText('Alatrol', { exact: true })).toBeVisible()
+  await noSideScroll(page)
+})
+
+test('welcome example stays still when the system asks for reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  const card = page.locator('section').first()
+  await expect(card.getByText('Napa', { exact: true })).toBeVisible()
+  await page.waitForTimeout(6500)
+  await expect(card.getByText('Napa', { exact: true })).toBeVisible()
+  await expect(card.getByRole('button', { name: 'উদাহরণ থামান' })).toHaveCount(0)
+})
