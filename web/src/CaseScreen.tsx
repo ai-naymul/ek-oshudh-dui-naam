@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Camera, FileText, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
+import { Camera, FileText, Images, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
 import { Recorder } from './Recorder'
 import { ApiError, api, bn, bnInt, shrink, statusKey, type Health, type ItemView, type Option, type Stats, type Taking } from './api'
 import { useCopy, t as tt } from './copy'
@@ -27,6 +27,8 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const t = useCopy()
   const rxInput = useRef<HTMLInputElement>(null)
   const stripInput = useRef<HTMLInputElement>(null)
+  const rxCamera = useRef<HTMLInputElement>(null)
+  const [rxPick, setRxPick] = useState(false)   // prescription: camera or gallery
   const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
@@ -154,15 +156,26 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <p className="mt-1 text-muted">{t('case.sub')}</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || noKey} onClick={() => rxInput.current?.click()} />
+        <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || noKey} active={rxPick} onClick={() => { setRxPick((v) => !v); setTyping(false) }} />
         <Tile icon={<Camera />} label={t('tile.strip')} hint={t('tile.strip_hint')} disabled={!!busy || noKey} onClick={() => stripInput.current?.click()} />
         <Tile icon={<Mic />} label={t('tile.voice')} hint={t('tile.voice_hint')} disabled={!!busy || noKey} onClick={() => setRecording(true)} />
-        <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => setTyping((v) => !v)} />
+        <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => { setTyping((v) => !v); setRxPick(false) }} />
       </div>
       {!ready && <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-[0.95rem] text-warn"><AlertCircle size={18} className="mt-0.5 shrink-0" />{t('err.ai_off')}</p>}
       <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
+      <input ref={rxCamera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
       <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
       <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
+
+      {/* A prescription is photographed on the spot (camera) or picked from saved photos (one or several). */}
+      <AnimatePresence initial={false}>
+        {rxPick && (
+          <motion.div className="mt-3 grid grid-cols-2 gap-3 overflow-hidden" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={spring}>
+            <Tile icon={<Camera />} label={t('tile.rx_camera')} hint={t('tile.rx_camera_hint')} disabled={!!busy} onClick={() => { setRxPick(false); rxCamera.current?.click() }} />
+            <Tile icon={<Images />} label={t('tile.rx_gallery')} hint={t('tile.rx_gallery_hint')} disabled={!!busy} onClick={() => { setRxPick(false); rxInput.current?.click() }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence initial={false}>
         {typing && (
@@ -275,7 +288,7 @@ function Tile({ icon, label, hint, onClick, active, disabled }: { icon: React.Re
     <Press onClick={onClick} disabled={disabled} aria-pressed={active}
       className={`flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-2xl bg-white px-2 py-3 text-center ring-1 disabled:opacity-40 ${active ? 'ring-2 ring-rx' : 'ring-foil'}`}>
       <span className="grid h-11 w-11 place-items-center rounded-full bg-rx-soft text-rx">{icon}</span>
-      <span className="leading-tight"><span className="block text-[1rem] font-semibold">{label}</span><span className="text-[0.85rem] text-muted">{hint}</span></span>
+      <span className="leading-tight"><span className="label block whitespace-nowrap text-[1rem] font-semibold">{label}</span><span className="text-[0.85rem] text-muted">{hint}</span></span>
     </Press>
   )
 }

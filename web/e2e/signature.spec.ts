@@ -129,3 +129,21 @@ test('welcome example stays still when the system asks for reduced motion', asyn
   await expect(card.getByText('Napa', { exact: true })).toBeVisible()
   await expect(card.getByRole('button', { name: 'উদাহরণ থামান' })).toHaveCount(0)
 })
+
+// A prescription can be photographed on the spot (camera) or picked from the gallery (one or several saved photos).
+test('prescription: take a photo with the camera or pick from the gallery', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  const camera = page.getByRole('button', { name: /ক্যামেরায় তুলুন/ })
+  const gallery = page.getByRole('button', { name: /গ্যালারি থেকে বাছুন/ })
+  await expect(camera).toBeVisible()
+  await expect(gallery).toBeVisible()
+  for (const b of [camera, gallery]) {
+    const lines = await b.evaluate((el) => { const s = el.querySelector('.label') as HTMLElement; return Math.round(s.getBoundingClientRect().height / parseFloat(getComputedStyle(s).lineHeight)) })
+    expect(lines, 'button label wraps').toBe(1)
+  }
+  await expect(page.locator('input[type=file][capture="environment"]')).toHaveCount(2)   // prescription camera + strip
+  await expect(page.locator('input[type=file][multiple]')).toHaveCount(1)                // gallery
+  await noSideScroll(page)
+})
