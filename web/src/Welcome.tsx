@@ -7,8 +7,9 @@ import { Converge, Press, spring } from './Shell'
 
 // Numbers come from /api/stats (the registry and models/policy.json). The example is chosen by the person, not rotated.
 const MAX_BRAND = 9, MAX_INGREDIENT = 20
-// The example moves on by itself so it draws the eye while people talk; long enough to read one pair in full.
-const ADVANCE_MS = 5500
+// The example moves on by itself so it draws the eye while people talk: each pair is drawn in ~0.9 s, the ring
+// pulses until ~1.6 s, then the next pair.
+const ADVANCE_MS = 2000
 
 export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | null; onStart: () => void; onSample: () => void; busy: boolean }) {
   const t = useCopy()
@@ -58,7 +59,7 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
           {ex ? (
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={ex.ingredient} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-                <Converge ingredient={ex.ingredient} pace={1.8}
+                <Converge ingredient={ex.ingredient} pace={0.8}
                   left={<span className="hand whitespace-nowrap text-[1.7rem] leading-none">{ex.brands[0]}</span>}
                   right={<span className="hand whitespace-nowrap text-[1.7rem] leading-none">{ex.brands[1]}</span>} />
               </motion.div>

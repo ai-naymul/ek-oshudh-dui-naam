@@ -195,7 +195,7 @@ export function Converge({ left, right, ingredient, caption, play = true, pace =
           {/* one soft ring when the two names land on the one ingredient */}
           {!still && <motion.span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-danger"
             initial={{ opacity: 0, scale: 1 }} animate={{ opacity: [0, 0.7, 0], scale: [1, 1.02, 1.28] }}
-            transition={{ duration: 1, ease: 'easeOut', times: [0, 0.2, 1], delay: at(0.75) + 0.25 }} />}
+            transition={{ duration: 0.7, ease: 'easeOut', times: [0, 0.2, 1], delay: at(0.75) + 0.25 }} />}
           <p className="print max-w-full truncate rounded-2xl border-2 border-ink bg-white px-5 py-2 text-[1.2rem] font-semibold">{ingredient}</p>
         </div>
         {caption && <p className="mt-2 text-[1rem] font-semibold text-danger">{caption}</p>}
