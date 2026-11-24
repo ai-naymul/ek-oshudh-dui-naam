@@ -93,3 +93,57 @@ def test_the_same_spoken_reply_is_made_only_once(monkeypatch):
     e.add_text(case, "Napa 500\nAce 500")
     assert e.speech(case)[0] == e.speech(case)[0] == b"RIFF"
     assert len(calls) == 1
+
+
+def _wav(seconds=0.2):
+    import io
+    import wave
+    buf = io.BytesIO()
+    w = wave.open(buf, "wb")
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000)
+    w.writeframes(b"\x00\x00" * int(24000 * seconds))
+    w.close()
+    return buf.getvalue()
+
+
+def test_the_reply_is_spoken_in_parts_at_the_same_time(monkeypatch):
+    # One long reply took ~12 s on the venue network; its sentences are now spoken together and joined.
+    import io
+    import time
+    import wave
+    import app.ai.speech as speech
+    monkeypatch.setattr(speech, "speak_bn", lambda text: (time.sleep(0.5), (_wav(), "audio/wav", {"model": "fake"}))[1])
+    t0 = time.time()
+    audio, mime, meta = speech.speak_parts(["এক।", "দুই।", "তিন।"])
+    assert time.time() - t0 < 1.2 and mime == "audio/wav" and meta["parts"] == 3
+    w = wave.open(io.BytesIO(audio))
+    assert abs(w.getnframes() / w.getframerate() - (3 * 0.2 + 2 * 0.3)) < 0.01
+
+
+def test_checking_the_bag_starts_the_reply_before_anyone_asks_for_it(monkeypatch):
+    import app.ai.speech as speech
+    from app.conversation import Engine
+    calls = []
+    monkeypatch.setattr(speech, "speak_bn", lambda text: (calls.append(text) or _wav(), "audio/wav", {"model": "fake"}))
+    e = Engine()
+    case = e.new_case()
+    e.add_text(case, "Napa 500\nAce 500")
+    e.prefetch_speech(case)
+    audio, _, _ = e.speech(case)
+    assert audio.startswith(b"RIFF") and len(calls) >= 1
+    n = len(calls)
+    e.speech(case)
+    assert len(calls) == n
+
+
+def test_cases_survive_a_server_restart(monkeypatch, tmp_path):
+    import time
+    from app.conversation import Engine
+    monkeypatch.setenv("EK_CASES_FILE", str(tmp_path / "cases.pkl"))
+    e1 = Engine()
+    case = e1.new_case()
+    e1.add_text(case, "Napa 500")
+    time.sleep(3.5)                                   # saved every 3 s
+    e2 = Engine()                                     # a new server process
+    assert [i.reading for i in e2.get(case.case_id).items] == ["Napa 500"]
+    e2.get(case.case_id).new_ids(1)                  # the case lock works again after loading

@@ -103,18 +103,55 @@ def mentions(transcript: str) -> tuple[list[dict], dict]:
     return [i for i in out.get("items", []) if (i.get("name_as_said") or i.get("name_english_letters"))], meta
 
 
-def findings_speech(findings: list[dict], unchecked: int = 0) -> str:
-    """Bangla script for the voice reply, built only from the template findings (red first, then amber).
-    Medicines still waiting for confirmation are said out loud: the reply never sounds like an all-clear for them."""
+def findings_speech_parts(findings: list[dict], unchecked: int = 0) -> list[str]:
+    """Bangla script for the voice reply, built only from the template findings (red first, then amber), one part per
+    sentence group so the parts can be spoken at the same time. Medicines still waiting for confirmation are said out
+    loud: the reply never sounds like an all-clear for them."""
     order = {"red": 0, "amber": 1, "info": 2}
     chosen = sorted([f for f in findings if f["severity"] in ("red", "amber")], key=lambda f: order[f["severity"]])[:4]
     from app.core.explain_bn import bn_num, load_copy
     s = load_copy()["speech"]
     pending = s["unchecked"].format(n=bn_num(unchecked)) if unchecked else ""
     if not chosen:
-        return pending + s["show"] if unchecked else s["none"]
+        return [pending + s["show"]] if unchecked else [s["none"]]
     head = s["head_red"] if chosen[0]["severity"] == "red" else s["head_amber"]
-    return head + " ".join(f["bn"] for f in chosen) + (" " + pending if pending else "")
+    return [head + chosen[0]["bn"]] + [f["bn"] for f in chosen[1:]] + ([pending] if pending else [])
+
+
+def findings_speech(findings: list[dict], unchecked: int = 0) -> str:
+    return " ".join(findings_speech_parts(findings, unchecked))
+
+
+def _join_wavs(chunks: list[bytes], pause: float = 0.3) -> bytes:
+    import io
+    import wave
+    out, w = io.BytesIO(), None
+    for k, chunk in enumerate(chunks):
+        r = wave.open(io.BytesIO(chunk))
+        if w is None:
+            w = wave.open(out, "wb")
+            w.setparams(r.getparams())
+        elif r.getparams()[:3] != w.getparams()[:3]:
+            raise ValueError("different audio formats")
+        if k:
+            w.writeframes(b"\x00" * int(r.getframerate() * pause) * r.getsampwidth() * r.getnchannels())
+        w.writeframes(r.readframes(r.getnframes()))
+    w.close()
+    return out.getvalue()
+
+
+def speak_parts(parts: list[str]) -> tuple[bytes, str, dict]:
+    """Speak each part at the same time and join them (one long reply took ~12 s on the venue network; parts in
+    parallel take about as long as the longest part). Falls back to one call if the pieces cannot be joined."""
+    if len(parts) == 1:
+        return speak_bn(parts[0])
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(len(parts)) as ex:
+        outs = list(ex.map(speak_bn, parts))
+    try:
+        return _join_wavs([a for a, _, _ in outs]), "audio/wav", {**outs[0][2], "parts": len(parts)}
+    except Exception:
+        return speak_bn(" ".join(parts))
 
 
 def speak_bn(text: str) -> tuple[bytes, str, dict]:

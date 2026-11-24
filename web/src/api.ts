@@ -39,7 +39,7 @@ export type Taking = 'current' | 'stopped' | 'unsure'
 export type Finding = { rule: string; severity: 'red' | 'amber' | 'info'; title_bn: string; title_en: string; bn: string; en: string; source: string; meds: string[] }
 export type Path = { brand: string; strength: string; form: string; maker: string; ingredients: { name: string; strength: string; class: string | null }[] }
 export type Medicine = {
-  med_id: string; brand: string; strength: string; form: string; applied?: boolean; path: Path; per_day: number | null; from_rx: boolean
+  med_id: string; brand: string; strength: string; form: string; applied?: boolean; unit_price?: number | null; path: Path; per_day: number | null; from_rx: boolean
   doctors: string[]; taking: Taking; checked: boolean; monthly_cost: number | null; cheaper: { brand: string; maker: string; unit_price: number }[]; items: string[]
 }
 export type Stats = {

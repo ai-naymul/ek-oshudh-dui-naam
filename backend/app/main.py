@@ -272,7 +272,11 @@ def resolve_item(case_id: str, item_id: str):
 @app.get("/api/cases/{case_id}/check")
 def check(case_id: str):
     t0 = time.time()
-    return live(engine().check(_case(case_id)), t0)
+    case = _case(case_id)
+    out = live(engine().check(case), t0)
+    if os.environ.get("EK_PREFETCH_SPEECH"):   # live servers: start the voice reply now, while the result is read
+        engine().prefetch_speech(case)
+    return out
 
 
 @app.get("/api/cases/{case_id}/items/{item_id}/crop.jpg")

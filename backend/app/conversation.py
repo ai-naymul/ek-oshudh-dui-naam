@@ -10,7 +10,7 @@ import json
 import os
 import threading
 import re
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -115,6 +115,15 @@ class Case:
     _next_item: int = 1
     _next_doc: int = 1
 
+    def __getstate__(self):          # saved to disk without its lock (cases survive a server restart)
+        state = dict(self.__dict__)
+        state.pop("lock", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.lock = threading.Lock()
+
     def new_ids(self, n_items: int, new_doc: bool = False) -> tuple[list[str], str | None]:
         """Reserve item ids (and a document id) under the case lock: parallel uploads never share an id."""
         with self.lock:
@@ -143,6 +152,13 @@ class Engine:
             self.decider = Decider()
             self.ppb = products_per_brand(self.graph)
         self.cases: dict[str, Case] = {}
+        self._speech_cache: dict[str, tuple[bytes, str]] = {}   # reply text -> audio
+        self._speech_running: dict = {}
+        self._speech_lock = threading.Lock()
+        self._speech_pool = ThreadPoolExecutor(4)
+        self._load_cases()
+        if os.environ.get("EK_CASES_FILE"):
+            threading.Thread(target=self._save_cases_forever, daemon=True).start()
         self.lock = threading.Lock()
 
     # ---------- case store ----------
@@ -433,23 +449,78 @@ class Engine:
         self._commit(case, new, steps)
         return {"transcript": transcript, "items": [self.item_view(i) for i in new]}
 
-    _SPEECH: dict[str, tuple[bytes, str]] = {}   # reply text -> audio: the same findings are spoken with the same words
-
-    def speech(self, case: Case) -> tuple[bytes, str, str]:
-        """The result page asks for this as soon as it appears, so the tap plays at once; the same text is made once."""
+    def _speech_job(self, case: Case):
+        """(text, future): the reply audio for the case's current findings, made once per text; a request while it is
+        being made waits for that same job instead of starting another."""
         from app.ai import speech as sp
         result = self.check(case)
-        text = sp.findings_speech(result["findings"], result["unchecked"])
+        parts = sp.findings_speech_parts(result["findings"], result["unchecked"])
+        text = " ".join(parts)
+        with self._speech_lock:
+            if text in self._speech_cache:
+                fut = Future()
+                fut.set_result((*self._speech_cache[text], {"model": "cache"}))
+                return text, fut
+            fut = self._speech_running.get(text)
+            if fut is None:
+                fut = self._speech_pool.submit(self._make_speech, text, parts)
+                self._speech_running[text] = fut
+            return text, fut
+
+    def _make_speech(self, text: str, parts: list[str]):
+        from app.ai import speech as sp
+        try:
+            audio, mime, meta = sp.speak_parts(parts)
+            with self._speech_lock:
+                self._speech_cache[text] = (audio, mime)
+                while len(self._speech_cache) > 64:
+                    self._speech_cache.pop(next(iter(self._speech_cache)))
+            return audio, mime, meta
+        finally:
+            with self._speech_lock:
+                self._speech_running.pop(text, None)
+
+    def prefetch_speech(self, case: Case) -> None:
+        """Start making the reply audio now (called when the bag is checked), so the tap on শুনুন plays at once."""
+        try:
+            self._speech_job(case)
+        except Exception:
+            pass
+
+    def speech(self, case: Case) -> tuple[bytes, str, str]:
         t0 = time.time()
-        if text in self._SPEECH:
-            (audio, mime), meta = self._SPEECH[text], {"model": "cache"}
-        else:
-            audio, mime, meta = sp.speak_bn(text)
-            self._SPEECH[text] = (audio, mime)
-            while len(self._SPEECH) > 64:
-                self._SPEECH.pop(next(iter(self._SPEECH)))
+        text, fut = self._speech_job(case)
+        audio, mime, meta = fut.result()
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
         return audio, mime, text
+
+    # ---------- cases survive a server restart (on only for the live servers: EK_CASES_FILE) ----------
+    def _load_cases(self) -> None:
+        import pickle
+        path = os.environ.get("EK_CASES_FILE")
+        if not path or not os.path.exists(path):
+            return
+        try:
+            saved = pickle.load(open(path, "rb"))
+            now = time.time()
+            self.cases.update({cid: c for cid, c in saved.items() if now - c.created <= TTL_SECONDS})
+        except Exception:
+            pass
+
+    def _save_cases_forever(self) -> None:
+        import pickle
+        path = os.environ["EK_CASES_FILE"]
+        while True:
+            time.sleep(3)
+            try:
+                with self.lock:
+                    snapshot = dict(self.cases)
+                tmp = path + ".tmp"
+                with open(tmp, "wb") as f:
+                    pickle.dump(snapshot, f)
+                os.replace(tmp, path)
+            except Exception:
+                pass
 
     def remove(self, case: Case, item_id: str) -> None:
         with case.lock:
@@ -537,6 +608,7 @@ class Engine:
         out_meds = []
         for m in meds:
             out_meds.append({"med_id": m.med_id, "brand": m.brand, "strength": m.strength, "form": m.form,
+                             "unit_price": m.unit_price,   # shown when the monthly cost is unknown (no schedule)
                              "applied": site_of(m.form) != "body",   # cream, lotion, drops: 'used', not 'eaten'
                              "path": self.graph.path(m.product_id), "per_day": m.per_day, "from_rx": m.from_rx,
                              "doctors": m.doctors, "taking": m.taking, "monthly_cost": Rules.monthly_cost(m),

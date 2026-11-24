@@ -108,3 +108,10 @@ def test_the_app_page_is_never_served_from_an_old_cache(client):
     # A phone that opened the link before kept the old page (and so the old app) after an update.
     r = client.get("/")
     assert r.status_code == 200 and "no-cache" in r.headers.get("cache-control", "")
+
+
+def test_medicines_carry_their_unit_price_for_when_the_schedule_is_unknown(client):
+    cid = client.post("/api/cases").json()["case_id"]
+    client.post(f"/api/cases/{cid}/text", json={"text": "Napa 500"})
+    med = client.get(f"/api/cases/{cid}/check").json()["medicines"][0]
+    assert med["monthly_cost"] is None and med["unit_price"] and med["unit_price"] > 0

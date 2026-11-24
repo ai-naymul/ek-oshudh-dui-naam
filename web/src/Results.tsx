@@ -162,7 +162,8 @@ function MedRow({ m }: { m: Medicine }) {
     <li className="p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <p className="print text-[1.2rem] font-semibold">{m.brand} <span className="font-normal text-muted">{m.strength}</span></p>
-        {m.monthly_cost != null && <p className="whitespace-nowrap text-[0.95rem] text-muted">{t('meds.month', { n: bn(Math.round(m.monthly_cost)) })}</p>}
+        {m.monthly_cost != null ? <p className="whitespace-nowrap text-[0.95rem] text-muted">{t('meds.month', { n: bn(Math.round(m.monthly_cost)) })}</p>
+          : m.unit_price != null && <p className="whitespace-nowrap text-[0.95rem] text-muted" title={t('meds.unit_hint')}>{t('meds.unit', { n: bn(m.unit_price) })}</p>}
       </div>
       <p className="text-[0.95rem] text-muted">{m.form}{m.taking === 'stopped' ? `, ${t('status.stopped')}` : ''}</p>
       {m.checked === false
