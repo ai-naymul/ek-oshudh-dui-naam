@@ -58,7 +58,7 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
       <section aria-label={t('welcome.example_head')} className="sheet lift mt-10 px-5 py-6 sm:px-7 lg:mt-0"
         onPointerEnter={() => setHold(true)} onPointerLeave={() => setHold(false)}
         onFocus={() => setHold(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHold(false) }}>
-        <p className="print text-[0.95rem] font-semibold text-rx">℞ {t('welcome.example_head')}</p>
+        <p className="print text-[0.95rem] font-semibold text-rx">{t('welcome.example_head')}</p>
         <div className="mt-4 min-h-[190px] rounded-xl bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_37px,rgba(36,64,142,0.08)_37px,rgba(36,64,142,0.08)_38px)] px-2 py-3">
           {ex ? (
             <AnimatePresence mode="wait" initial={false}>
