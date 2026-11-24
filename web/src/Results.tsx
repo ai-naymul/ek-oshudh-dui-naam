@@ -33,6 +33,7 @@ export function Results({ result, items, onBack, onRecheck }: {
 
   return (
     <motion.main className="mx-auto max-w-2xl px-4 pb-16 pt-6 lg:pt-10" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={spring}>
+      <p className="text-[0.95rem] font-semibold text-muted">{t('verdict.bag')}</p>
       <h2 className={`display text-[2rem] sm:text-[2.4rem] ${verdict.cls}`}>{verdict.text}</h2>
       <p className="mt-1 text-muted">{t('verdict.sub', { n: bn(result.medicines.length) })}</p>
       {pending > 0 && (

@@ -177,3 +177,34 @@ test('several photos are read at once, and the camera stays usable meanwhile', a
   await expect(page.getByRole('article')).toHaveCount(3)
   await noSideScroll(page)
 })
+
+// Camera: one photo per opening (a phone limit), so after each photo one tap opens the camera again; earlier photos
+// keep being read meanwhile.
+test('camera: take photo after photo without waiting', async ({ page }) => {
+  await page.route('**/images', async (route) => {
+    await new Promise((r) => setTimeout(r, 3000))
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ doc_id: 'd', duplicate_of: null, kind: 'strip', items: [], request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  let chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: /ক্যামেরায় তুলুন/ }).click()
+  await (await chooser).setFiles({ name: 'a.png', mimeType: 'image/png', buffer: PNG })
+  const again = page.getByRole('button', { name: /আরেকটা ছবি তুলুন/ })
+  await expect(again).toBeVisible()
+  chooser = page.waitForEvent('filechooser')
+  await again.click()
+  const fc = await chooser
+  expect(await fc.element().getAttribute('capture')).toBe('environment')
+  await fc.setFiles({ name: 'b.png', mimeType: 'image/png', buffer: PNG })
+  await expect(page.getByText(/ছবি ২: পড়া হচ্ছে/)).toBeVisible()
+  await noSideScroll(page)
+})
+
+test('the result is one verdict for the whole bag', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'নমুনা দেখুন' }).click()
+  await page.getByRole('button', { name: /মিলিয়ে দেখুন/ }).click()
+  await expect(page.getByText('পুরো ব্যাগের ফল', { exact: true })).toBeVisible()
+})

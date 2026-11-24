@@ -31,6 +31,8 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const stripInput = useRef<HTMLInputElement>(null)
   const rxCamera = useRef<HTMLInputElement>(null)
   const [rxPick, setRxPick] = useState(false)   // prescription: camera or gallery
+  // The phone camera returns one photo per opening; after a camera photo, one tap opens the same camera again.
+  const [lastCamera, setLastCamera] = useState<'rx' | 'strip' | null>(null)
   const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
@@ -164,12 +166,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
         <Tile icon={<FileText />} label={t('tile.rx')} hint={t('tile.rx_hint')} disabled={!!busy || noKey} active={rxPick} onClick={() => { setRxPick((v) => !v); setTyping(false) }} />
         <Tile icon={<Camera />} label={t('tile.strip')} hint={t('tile.strip_hint')} disabled={!!busy || noKey} onClick={() => stripInput.current?.click()} />
         <Tile icon={<Mic />} label={t('tile.voice')} hint={t('tile.voice_hint')} disabled={!!busy || noKey} onClick={() => setRecording(true)} />
-        <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => { setTyping((v) => !v); setRxPick(false) }} />
+        <Tile icon={<Keyboard />} label={t('tile.type')} hint={t('tile.type_hint')} disabled={!!busy} active={typing} onClick={() => { setTyping((v) => !v); setRxPick(false); setLastCamera(null) }} />
       </div>
       {!ready && <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-[0.95rem] text-warn"><AlertCircle size={18} className="mt-0.5 shrink-0" />{t('err.ai_off')}</p>}
       <input ref={rxInput} type="file" accept="image/*" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
-      <input ref={rxCamera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
-      <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = '' }} />
+      <input ref={rxCamera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; setLastCamera('rx') }} />
+      <input ref={stripInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; setLastCamera('strip') }} />
       <AnimatePresence>{recording && <Recorder onDone={onVoice} onClose={() => setRecording(false)} />}</AnimatePresence>
 
       {/* A prescription is photographed on the spot (camera) or picked from saved photos (one or several). */}
@@ -177,7 +179,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
         {rxPick && (
           <motion.div className="mt-3 grid grid-cols-2 gap-3 overflow-hidden" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={spring}>
             <Tile icon={<Camera />} label={t('tile.rx_camera')} hint={t('tile.rx_camera_hint')} disabled={!!busy} onClick={() => { setRxPick(false); rxCamera.current?.click() }} />
-            <Tile icon={<Images />} label={t('tile.rx_gallery')} hint={t('tile.rx_gallery_hint')} disabled={!!busy} onClick={() => { setRxPick(false); rxInput.current?.click() }} />
+            <Tile icon={<Images />} label={t('tile.rx_gallery')} hint={t('tile.rx_gallery_hint')} disabled={!!busy} onClick={() => { setRxPick(false); setLastCamera(null); rxInput.current?.click() }} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -196,6 +198,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <div aria-live="polite" aria-atomic="false">
         {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl bg-danger-soft p-3 text-[1rem] text-danger"><AlertCircle className="mt-1 shrink-0" size={18} />{error}</p>}
         <AnimatePresence>{busy && <Working busy={busy} products={stats?.products} />}</AnimatePresence>
+        {lastCamera && (
+          <Press onClick={() => (lastCamera === 'rx' ? rxCamera : stripInput).current?.click()} disabled={noKey}
+            className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-rx text-[1.1rem] font-semibold text-white disabled:opacity-40">
+            <Camera size={22} aria-hidden />{t(lastCamera === 'rx' ? 'photos.another_rx' : 'photos.another_strip')}
+          </Press>
+        )}
         <AnimatePresence>
           {photos.length === 1 && reading && <Working busy={{ kind: 'image', preview: photos[0].preview }} products={stats?.products} />}
           {photos.length > 1 && <PhotoProgress photos={photos} />}
