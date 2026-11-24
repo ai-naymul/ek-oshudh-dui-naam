@@ -10,6 +10,7 @@ import json
 import os
 import threading
 import re
+from concurrent.futures import ThreadPoolExecutor
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -310,8 +311,7 @@ class Engine:
         ids, doc_id = case.new_ids(len(read["items"]), new_doc=True)
         source = "rx" if read["kind"] == "prescription" else "strip"
         steps = [("perceive", t0, dict(doc=doc_id, kind=read["kind"], lines=len(read["items"]), model=read["meta"].get("model")))]
-        new = []
-        for item_id, it in zip(ids, read["items"]):
+        def one(item_id, it):
             t1 = time.time()
             c = crop(read["image"], it.get("box"))
             parts = [image_part(c, "image/jpeg")] if c else None
@@ -323,9 +323,15 @@ class Engine:
                           it.get("strength_text", ""), it.get("schedule_text", ""), bool(it.get("handwritten")), it.get("agree"),
                           self._options(cands), chosen.product_id if chosen else None, round(conf, 3), method, confirm,
                           sched.per_day, sched.to_dict(), read.get("doctor_text") or doc_id, c)
-            new.append(ci)
-            steps.append(("match", t1, dict(item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
-                                             chosen=self.options_brand(ci))))
+            return ci, ("match", t1, dict(item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
+                                          chosen=self.options_brand(ci)))
+        # The lines are matched together (an unsure line waits for the AI's second look; one after another, a photo of
+        # eight strips once took 122 s). map keeps the photo's order.
+        pairs = list(zip(ids, read["items"]))
+        with ThreadPoolExecutor(max(1, min(8, len(pairs)))) as pool:
+            done = list(pool.map(lambda p: one(*p), pairs))
+        new = [ci for ci, _ in done]
+        steps += [s for _, s in done]
         if source == "strip":
             new = self._drop_ingredient_lines(self._one_per_product(new))
         # only now, when every line was read and matched, does the photo become part of the case (all or nothing)

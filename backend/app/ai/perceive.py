@@ -8,7 +8,7 @@ Patient names are deliberately not part of the schema.
 from __future__ import annotations
 
 import io
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from concurrent.futures import TimeoutError as FuturesTimeout
 
 from PIL import Image
@@ -90,6 +90,9 @@ def name_agreement(text: str, others: list[str]) -> float:
 # A judge or a family must never wait minutes for one photo: the main reader gets 45 s and one retry, and the optional
 # second reader (it only checks the names) gets at most SECOND_READER_WAIT seconds more after the first has answered.
 READ_TIMEOUT, READ_RETRIES, SECOND_READER_WAIT = 45, 1, 8
+# 24 Nov, venue network: the main reader sometimes hung to its time limit and retried (a photo waited 96 s). After
+# MAIN_WAIT seconds, whichever reader answers first is used; the second reader runs from the start anyway.
+MAIN_WAIT = 25
 _readers = ThreadPoolExecutor(8)
 
 
@@ -100,13 +103,25 @@ def read_image(data: bytes) -> dict:
     parts = [image_part(small, "image/jpeg"), {"text": PROMPT}]
     main_f = _readers.submit(generate, parts, READ_MODEL, SCHEMA, "low", READ_RETRIES, READ_TIMEOUT)
     lite_f = _readers.submit(generate, parts, LITE_MODEL, SCHEMA, None, READ_RETRIES, READ_TIMEOUT, optional=True)
-    lite = None
+    lite, from_main = None, True
     try:
-        main, meta = main_f.result()
+        main, meta = main_f.result(timeout=MAIN_WAIT)
     except GeminiError:
         main, meta = lite_f.result()  # fallback reader
-        meta["fallback"] = True
-    else:
+        meta["fallback"], from_main = True, False
+    except FuturesTimeout:            # main reader stalled: from now on, whichever reader answers first
+        wait([main_f, lite_f], return_when=FIRST_COMPLETED)
+        main_ok = main_f.done() and main_f.exception() is None
+        if not main_ok and lite_f.done() and lite_f.exception() is None:
+            main, meta = lite_f.result()
+            meta, from_main = {**meta, "fallback": "main reader slow"}, False
+        else:
+            try:
+                main, meta = main_f.result()
+            except GeminiError:
+                main, meta = lite_f.result()
+                meta["fallback"], from_main = True, False
+    if from_main:
         try:
             lite, _ = lite_f.result(timeout=SECOND_READER_WAIT)
         except (GeminiError, FuturesTimeout):

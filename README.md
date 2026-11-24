@@ -80,6 +80,11 @@ scan in one photo).
   both taken now, turn red. One verdict for the whole bag, never per photo.
 - Several photos are read at the same time, and more can be taken while they are read; each photo shows what it gave
   ("ছবি ২: ২টি ওষুধ পাওয়া গেছে") and the bag is checked when all are done.
+- Several strips laid out in ONE photo (composites of real pharmacy product photos, 2 runs each): 4 strips -> 4/4,
+  6 -> 6/6, 8 -> 8/8, nothing missing, nothing extra, 15-28 s. The 8-strip photo gave one bag verdict: red Sergel +
+  Maxpro (esomeprazole), red Napa + Ace (paracetamol), amber Alatrol, Deslor, Fexo (antihistamines), amber Sergel,
+  Maxpro, Seclo (proton-pump inhibitors). The lines of a photo are matched together, and a stalled main reader gives
+  way to the second reader after 25 s (one run had waited 96-122 s before).
 - Checked with real photos on 24 Nov: Napa + Ace strips in one photo gave 2 cards and one red; a composite of one strip
   in three packets gave 1 card; a composite of three products gave 3 cards; three photos read together took 21.5 s.
 
@@ -148,7 +153,7 @@ with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cas
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 221 tests, no API key needed (also run in CI on every push)
+cd backend && uv run pytest -q          # 224 tests, no API key needed (also run in CI on every push)
 cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
