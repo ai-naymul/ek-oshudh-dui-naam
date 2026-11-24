@@ -144,7 +144,7 @@ with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cas
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 204 tests, no API key needed (also run in CI on every push)
+cd backend && uv run pytest -q          # 217 tests, no API key needed (also run in CI on every push)
 cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
