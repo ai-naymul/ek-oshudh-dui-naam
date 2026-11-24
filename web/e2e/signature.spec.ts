@@ -246,3 +246,12 @@ test('the spoken reply is prepared before the tap', async ({ page }) => {
   await expect(page.getByText('পুরো ব্যাগের ফল', { exact: true })).toBeVisible()
   await expect.poll(() => asked, { timeout: 5000 }).toBeGreaterThanOrEqual(1)
 })
+
+test('the app name in the top bar goes back to the first page', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'নমুনা দেখুন' }).click()
+  await expect(page.getByRole('article').first()).toBeVisible()
+  await page.getByRole('button', { name: 'প্রথম পাতায় যান' }).click()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' })).toBeVisible()
+})

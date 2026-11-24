@@ -89,7 +89,8 @@ export default function App() {
   const step = screen === 'case' ? (items.some((i) => i.needs_confirm) ? 1 : 0) : screen === 'results' ? 2 : null
   return (
     <MotionConfig reducedMotion="user">
-      <TopBar step={step} health={health} onNew={screen === 'case' || screen === 'results' ? start : null} />
+      <TopBar step={step} health={health} onNew={screen === 'case' || screen === 'results' ? start : null}
+        onHome={screen === 'welcome' ? null : () => { setError(null); setScreen('welcome'); if (window.location.search) window.history.replaceState(null, '', window.location.pathname) }} />
       <AnimatePresence>
         {error && (
           <motion.div role="alert" className="fixed inset-x-4 top-20 z-50 mx-auto flex max-w-lg items-start gap-3 rounded-2xl bg-danger p-4 text-white shadow-lg"

@@ -52,7 +52,7 @@ export function aiReady(h: Health | null) {
 
 const STEP_KEYS = ['steps.add', 'steps.confirm', 'steps.result']
 
-export function TopBar({ step, onNew, health }: { step: number | null; onNew: (() => void) | null; health: Health | null }) {
+export function TopBar({ step, onNew, onHome, health }: { step: number | null; onNew: (() => void) | null; onHome?: (() => void) | null; health: Health | null }) {
   const t = useCopy()
   const [qr, setQr] = useState(false)
   const size = useTextScale()
@@ -60,10 +60,12 @@ export function TopBar({ step, onNew, health }: { step: number | null; onNew: ((
   return (
     <header className="glass sticky top-0 z-30 border-b border-foil/70">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4">
-        <div className="flex shrink-0 items-center gap-2.5">
+        {/* the name is the way home: tap it on any screen to go back to the first page */}
+        <button type="button" onClick={onHome ?? undefined} disabled={!onHome} aria-label={t('app.home')}
+          className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl pr-1 disabled:cursor-default">
           <Mark />
           <span className="display hidden whitespace-nowrap text-[1.1rem] text-rx-deep min-[400px]:inline">{t('app.name')}</span>
-        </div>
+        </button>
         {step !== null && (
           <ol className="mx-auto hidden items-center gap-1 lg:flex" aria-label={t('steps.aria')}>
             {STEP_KEYS.map((k, i) => {
