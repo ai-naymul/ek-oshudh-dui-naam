@@ -8,6 +8,8 @@ import { Press, aiReady, spring } from './Shell'
 
 // For several photos at once: which one is being read (n of 'of') and how many medicines each finished one gave.
 type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string; n?: number; of?: number; done?: number[] } | null
+// One row per photo being read. Photos are read at the same time, and more can be added while they are read.
+type Photo = { id: number; preview: string; state: 'reading' | 'done' | 'none' | 'failed' | 'repeat'; found: number }
 type Pending = { item: ItemView; index: number; timer: number } | null
 
 function errorText(e: unknown, kind: 'image' | 'voice' | 'text'): string {
@@ -38,6 +40,9 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const [repeat, setRepeat] = useState<Blob | null>(null)
   const [pending, setPending] = useState<Pending>(null)
   const [doneNote, setDoneNote] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const photoSeq = useRef(0)
+  const reading = photos.some((p) => p.state === 'reading')
   const ready = aiReady(health)
   const noKey = health ? !health.ai.key_present : false
   // late answers from a case that is no longer on screen must not land in the new one
@@ -87,46 +92,46 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     if (alive.current) setBusy(null)
   }, [caseId, setItems])
 
-  async function addPhoto(blob: Blob, allowRepeat = false): Promise<number> {
-    const res = await api.addImage(caseId, blob, allowRepeat)
-    if (!alive.current) return 0
-    if (res.duplicate_of) { setRepeat(blob); return 0 }
-    addItems(res.items)
-    if (!res.items.length) fail(tt('err.no_items_photo'))
-    return res.items.length
+  // Read one photo; several run at the same time (the server only locks the case to save the result).
+  async function readPhoto(file: Blob, allowRepeat = false) {
+    const id = ++photoSeq.current
+    const preview = URL.createObjectURL(file)
+    setPhotos((ps) => [...ps, { id, preview, state: 'reading', found: 0 }])
+    const set = (patch: Partial<Photo>) => { if (alive.current) setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p))) }
+    let small: Blob
+    try { small = file instanceof File ? await shrink(file) : file } catch { fail(tt('err.not_photo')); set({ state: 'failed' }); return }
+    try {
+      const res = await api.addImage(caseId, small, allowRepeat)
+      if (!alive.current) return
+      if (res.duplicate_of) { setRepeat(small); set({ state: 'repeat' }); return }
+      addItems(res.items)
+      if (!res.items.length) fail(tt('err.no_items_photo'))
+      set({ state: res.items.length ? 'done' : 'none', found: res.items.length })
+    } catch (e) { fail(errorText(e, 'image')); set({ state: 'failed' }) }
   }
 
-  async function onFiles(files: FileList | null) {
-    if (!files?.length || busy) return
+  function onFiles(files: FileList | null) {
+    if (!files?.length) return
     setError(null)
-    setRepeat(null)
     setDoneNote(null)
-    // Several photos are read one after another; the card says which one is being read and what each finished one
-    // gave, so the first photo's medicines appearing never looks like the second photo was dropped.
-    const list = Array.from(files)
-    const done: number[] = []
-    for (const [k, f] of list.entries()) {
-      const preview = URL.createObjectURL(f)
-      setBusy({ kind: 'image', preview, n: k + 1, of: list.length, done: [...done] })
-      let small: Blob | null = null
-      try { small = await shrink(f) } catch { fail(tt('err.not_photo')) }   // e.g. a format the browser cannot open
-      let found = 0
-      if (small) { try { found = await addPhoto(small) } catch (e) { fail(errorText(e, 'image')) } }
-      done.push(found)
-      URL.revokeObjectURL(preview)
-    }
-    if (!alive.current) return
-    setBusy(null)
-    if (list.length > 1) setDoneNote(tt('photos.done', { n: bn(list.length), k: bn(done.reduce((a, b) => a + b, 0)) }))
+    for (const f of Array.from(files)) void readPhoto(f)
   }
 
-  async function addRepeat() {
+  // When every photo in this round is read: one summary line, and the progress rows go away.
+  useEffect(() => {
+    if (!photos.length || reading) return
+    const total = photos.reduce((a, p) => a + p.found, 0)
+    if (photos.length > 1) setDoneNote(tt('photos.done', { n: bn(photos.length), k: bn(total) }))
+    else if (photos[0].found > 1) setDoneNote(tt('photos.one_many', { k: bn(photos[0].found) }))
+    photos.forEach((p) => URL.revokeObjectURL(p.preview))
+    setPhotos([])
+  }, [photos, reading])
+
+  function addRepeat() {
     if (!repeat) return
     const blob = repeat
     setRepeat(null)
-    setBusy({ kind: 'image' })
-    try { await addPhoto(blob, true) } catch (e) { fail(errorText(e, 'image')) }
-    if (alive.current) setBusy(null)
+    void readPhoto(blob, true)
   }
 
   async function onText() {
@@ -191,6 +196,10 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <div aria-live="polite" aria-atomic="false">
         {error && <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl bg-danger-soft p-3 text-[1rem] text-danger"><AlertCircle className="mt-1 shrink-0" size={18} />{error}</p>}
         <AnimatePresence>{busy && <Working busy={busy} products={stats?.products} />}</AnimatePresence>
+        <AnimatePresence>
+          {photos.length === 1 && reading && <Working busy={{ kind: 'image', preview: photos[0].preview }} products={stats?.products} />}
+          {photos.length > 1 && <PhotoProgress photos={photos} />}
+        </AnimatePresence>
         {doneNote && !busy && <p role="status" className="mt-4 flex items-start gap-2 rounded-xl bg-rx-soft p-3 text-[1rem] text-rx-deep"><Check className="mt-1 shrink-0" size={18} strokeWidth={3} aria-hidden />{doneNote}</p>}
         <AnimatePresence>
           {repeat && (
@@ -209,7 +218,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
         </p>
       ))}
 
-      {!items.length && !busy ? <Empty /> : (
+      {!items.length && !busy && !reading ? <Empty /> : (
         <ul className="mt-6 space-y-4">
           <AnimatePresence initial={false}>
             {items.map((it) => (
@@ -234,7 +243,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <div className="glass-strong fixed inset-x-0 bottom-0 z-20 border-t border-foil px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto max-w-2xl">
           <p className={`mb-2 h-6 whitespace-nowrap text-center text-[0.95rem] font-semibold text-warn ${unconfirmed ? '' : 'invisible'}`}>{t('check.pending', { n: bn(unconfirmed) })}</p>
-          <Press onClick={check} disabled={!items.length || !!busy || checking}
+          <Press onClick={check} disabled={!items.length || !!busy || reading || checking}
             className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-[1.15rem] font-semibold text-white disabled:opacity-40">
             {checking && <Loader2 size={20} className="animate-spin" />}
             {t('check.button')}{items.length ? ` (${t('check.count', { n: bn(items.length) })})` : ''}
@@ -279,6 +288,38 @@ function Working({ busy, products }: { busy: NonNullable<Busy>; products?: numbe
       ) : <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-rx-soft text-rx"><Loader2 className="animate-spin" aria-hidden /></div>}
       <div><p className="text-[1.05rem] font-semibold">{title}</p>{hint && <p className="text-[0.95rem] text-muted">{hint}</p>}</div>
       </div>
+    </motion.div>
+  )
+}
+
+// Several photos: one row each, with what that photo gave once it is read.
+function PhotoProgress({ photos }: { photos: Photo[] }) {
+  const t = useCopy()
+  const reduce = useReducedMotion()
+  const label = (p: Photo, i: number) => {
+    const n = bn(i + 1)
+    return p.state === 'reading' ? t('photos.row_reading', { i: n }) : p.state === 'done' ? t('working.image_done', { i: n, k: bn(p.found) })
+      : p.state === 'none' ? t('photos.row_none', { i: n }) : p.state === 'repeat' ? t('photos.row_repeat', { i: n }) : t('photos.row_failed', { i: n })
+  }
+  return (
+    <motion.div className="sheet lift mt-4 p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+      <p className="text-[1.05rem] font-semibold">{t('photos.title')}</p>
+      <ul className="mt-3 space-y-2">
+        {photos.map((p, i) => (
+          <li key={p.id} className="flex items-center gap-3">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-paper">
+              <img src={p.preview} alt="" className="h-full w-full object-cover" />
+              {p.state === 'reading' && !reduce && <motion.div aria-hidden className="absolute inset-x-0 h-6 bg-gradient-to-b from-transparent via-rx/35 to-transparent"
+                initial={{ y: '-40%' }} animate={{ y: '220%' }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', repeatType: 'reverse' }} />}
+            </div>
+            <p className={`flex items-center gap-1.5 text-[0.95rem] ${p.state === 'done' ? 'font-semibold text-rx-deep' : p.state === 'reading' ? 'text-ink' : 'text-warn'}`}>
+              {p.state === 'reading' ? <Loader2 size={16} className="animate-spin" aria-hidden /> : p.state === 'done' ? <Check size={16} strokeWidth={3} aria-hidden /> : <AlertCircle size={16} aria-hidden />}
+              {label(p, i)}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[0.9rem] text-muted">{t('photos.more')}</p>
     </motion.div>
   )
 }

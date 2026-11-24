@@ -147,3 +147,33 @@ test('prescription: take a photo with the camera or pick from the gallery', asyn
   await expect(page.locator('input[type=file][multiple]')).toHaveCount(1)                // gallery
   await noSideScroll(page)
 })
+
+// Several photos are read at the same time, and more can be taken while they are read (onsite request). The server
+// is faked here with a slow reply, so the test measures how many photos are in flight together.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC', 'base64')
+test('several photos are read at once, and the camera stays usable meanwhile', async ({ page }) => {
+  let inFlight = 0, maxInFlight = 0, n = 0
+  await page.route('**/images', async (route) => {
+    inFlight++; maxInFlight = Math.max(maxInFlight, inFlight)
+    const k = ++n
+    await new Promise((r) => setTimeout(r, 2500))
+    inFlight--
+    const item = { item_id: `p${k}`, doc_id: `d${k}`, source: 'strip', reading: `Brand${k}`, alternatives: [], handwritten: false, agree: null,
+      chosen: null, confidence: 0, method: 'R2 unsure', needs_confirm: true, options: [], schedule: {}, per_day: null, has_crop: false,
+      agent: null, doctor: null, taking: 'unsure' }
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ doc_id: `d${k}`, duplicate_of: null, kind: 'strip', items: [item], request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  await page.locator('input[type=file][multiple]').setInputFiles(
+    [1, 2, 3].map((i) => ({ name: `strip${i}.png`, mimeType: 'image/png', buffer: PNG })))
+  await expect(page.getByText(/ছবি ৩: পড়া হচ্ছে/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /স্ট্রিপ বা বাক্স/ })).toBeEnabled()          // can take another photo now
+  await expect(page.getByRole('button', { name: /মিলিয়ে দেখুন/ })).toBeDisabled()            // but not check yet
+  await expect(page.getByText(/৩টি ছবি পড়া শেষ/)).toBeVisible({ timeout: 10000 })
+  expect(maxInFlight, 'photos read one after another').toBeGreaterThanOrEqual(3)
+  await expect(page.getByRole('article')).toHaveCount(3)
+  await noSideScroll(page)
+})

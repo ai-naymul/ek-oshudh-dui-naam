@@ -19,7 +19,7 @@ from app.core.candidates import Candidate, CandidateIndex, parse_hints
 from app.core.decide import Decider, products_per_brand
 from app.core.graph import ROOT, Graph, brand_key
 from app.core.rerank import distinct_brands, r1, r3
-from app.core.rules import Item, Rules, site_of
+from app.core.rules import Item, Rules, base_ingredient, site_of
 from app.core.schedule import parse as parse_schedule
 from app.core.settings import DEFAULTS as SETTINGS_DEFAULTS, _merge, load_settings
 
@@ -327,7 +327,7 @@ class Engine:
             steps.append(("match", t1, dict(item=ci.item_id, reading=ci.reading, method=method, confidence=ci.confidence,
                                              chosen=self.options_brand(ci))))
         if source == "strip":
-            new = self._one_per_product(new)
+            new = self._drop_ingredient_lines(self._one_per_product(new))
         # only now, when every line was read and matched, does the photo become part of the case (all or nothing)
         self._commit(case, new, steps, doc={"doc_id": doc_id, "kind": read["kind"], "doctor": read.get("doctor_text") or doc_id,
                                             "date": read.get("date_text") or "", "sig": sig})
@@ -344,6 +344,26 @@ class Engine:
                 best[key] = ci
         kept = {id(ci) for ci in best.values()}
         return [ci for ci in items if id(ci) in kept]
+
+    _PHARMACOPEIA = re.compile(r"\b(usp|bp|ip|inn|ph\.?\s*eur\.?)\b|[0-9.,]+\s*(mg|mcg|g|ml|iu|%)?", re.I)
+
+    def _drop_ingredient_lines(self, items: list) -> list:
+        """A strip also prints its ingredient ('Esomeprazole USP' under Sergel MUPS). A reader sometimes lists that as a
+        second medicine and the matcher offers another brand of the same ingredient: one strip would become a duplicate
+        (24 Nov, real photo: Sergel MUPS + 'Esomeprazole USP' -> Esoral MUPS). A line whose name is the ingredient of
+        another product in the same photo is that strip's ingredient text, so it is not a medicine of its own."""
+        from rapidfuzz import fuzz
+        ings = {id(ci): {base_ingredient(n) for n, _, _ in self.graph.ingredients(ci.product_id)}
+                for ci in items if ci.product_id is not None}
+
+        def ingredient_line(ci) -> bool:
+            if ci.product_id is not None and brand_key(self.graph.product(ci.product_id).brand) == brand_key(
+                    parse_hints(ci.reading)[0]):
+                return False                       # an exact registered brand name ('Calamine' lotion) is a medicine
+            name = base_ingredient(self._PHARMACOPEIA.sub(" ", ci.reading.lower()))
+            return bool(name) and any(fuzz.ratio(name, ing) >= 90 for other, names in ings.items() if other != id(ci)
+                                      for ing in names)
+        return [ci for ci in items if not ingredient_line(ci)]
 
     @staticmethod
     def _commit(case: Case, new: list, steps: list, doc: dict | None = None) -> None:

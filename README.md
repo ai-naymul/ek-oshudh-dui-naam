@@ -68,6 +68,32 @@ photos / voice / typed
 - The optional evidence agent (**সূত্র খুঁজুন**) only suggests: a step budget, a suggestion counts only if its own tools
   found it in this run, and the family sees a fixed sentence naming that evidence, never the model's own words.
 
+## Onsite challenges (finals, 24 Nov)
+
+Every case below is pinned by `backend/tests/test_challenges.py` (photo reader faked; matching, graph and rules real).
+
+**1. Scan one medicine strip in several packets at once and get a single bag verdict** (direction: multi-strip bag
+scan in one photo).
+- One photo can hold several strips: each different product becomes its own card; the same product printed many times
+  (English, Bangla, every blister, several packets) becomes one card.
+- The same medicine across photos or packets is one medicine in the bag; only different names for one ingredient,
+  both taken now, turn red. One verdict for the whole bag, never per photo.
+- Several photos are read at the same time, and more can be taken while they are read; each photo shows what it gave
+  ("ছবি ২: ২টি ওষুধ পাওয়া গেছে") and the bag is checked when all are done.
+- Checked with real photos on 24 Nov: Napa + Ace strips in one photo gave 2 cards and one red; a composite of one strip
+  in three packets gave 1 card; a composite of three products gave 3 cards; three photos read together took 21.5 s.
+
+**2. Stay careful when a brand is unknown or the strip photo is unreadable, so nothing is wrongly called a duplicate.**
+- A reading the decision model is not sure of, an unknown brand, or a spoken name waits for the family's tap and is
+  left out of every rule until then; the verdict says how many medicines are not checked and is never an all-clear.
+- An unreadable photo adds nothing and says so ("ছবিটা পড়া যায়নি, তাই কোনো ওষুধ ধরে নেওয়া হয়নি").
+- A strip also prints its ingredient ("Esomeprazole USP" under Sergel MUPS). On 24 Nov a real read listed that line as
+  a second medicine and the matcher offered another esomeprazole brand: one strip would have become a duplicate. Such
+  a line, when it is the ingredient of another product in the same photo, is now dropped (an exact registered brand
+  name, such as Calamine lotion, is kept).
+- Checked with real photos: blurred strip -> nothing added; a 60x80 px strip -> one line, asked, not accepted; four
+  unknown brand names typed next to known ones -> all asked, no duplicate.
+
 ## How well does the matching work?
 
 Measured on real handwriting by Bangladeshi doctors: the public *Doctor's Handwritten Prescription BD* dataset
