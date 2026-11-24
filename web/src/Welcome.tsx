@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { ChevronLeft, ChevronRight, Loader2, Pause, Play } from 'lucide-react'
+import { Loader2, Pause, Play } from 'lucide-react'
 import { bnInt, bnPct, type Stats } from './api'
 import { useCopy } from './copy'
 import { Converge, Press, spring } from './Shell'
@@ -21,7 +21,7 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
     .filter((e) => e.brands.length >= 2)
   const [i, setI] = useState(0)
   const reduce = useReducedMotion()
-  const [auto, setAuto] = useState(true)    // stops for good once the person picks an example or presses pause
+  const [auto, setAuto] = useState(true)    // the pause button stops it; no arrows, it moves by itself
   const [hold, setHold] = useState(false)   // pointer or keyboard focus on the card: do not move it under them
   const moving = auto && !hold && !reduce && examples.length > 1
   useEffect(() => {
@@ -29,7 +29,6 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
     const id = window.setTimeout(() => setI((x) => x + 1), ADVANCE_MS)
     return () => window.clearTimeout(id)
   }, [i, moving])
-  const pick = (step: number) => { setAuto(false); setI((x) => x + step) }
   const ex = examples.length ? examples[((i % examples.length) + examples.length) % examples.length] : null
   const lead = stats?.examples.find((e) => e.ingredient === 'Paracetamol') ?? stats?.examples[0]
 
@@ -82,12 +81,10 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
               </AnimatePresence>
             </div>
             <div className="flex shrink-0 gap-1">
-              <Press onClick={() => pick(-1)} aria-label={t('welcome.example_prev')} className="grid h-11 w-11 place-items-center rounded-full bg-paper"><ChevronLeft size={20} /></Press>
               {!reduce && examples.length > 1 && (
                 <Press onClick={() => setAuto((a) => !a)} aria-label={t(auto ? 'welcome.example_pause' : 'welcome.example_play')}
                   className="grid h-11 w-11 place-items-center rounded-full bg-paper">{auto ? <Pause size={18} /> : <Play size={18} />}</Press>
               )}
-              <Press onClick={() => pick(1)} aria-label={t('welcome.example_next')} className="grid h-11 w-11 place-items-center rounded-full bg-paper"><ChevronRight size={20} /></Press>
             </div>
           </div>
         )}
