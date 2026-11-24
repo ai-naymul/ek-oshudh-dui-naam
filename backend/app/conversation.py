@@ -533,8 +533,9 @@ class Engine:
         chosen = None
         if it.product_id:
             p = self.graph.product(it.product_id)
+            src = self.graph.source(p.id)
             chosen = {"product_id": p.id, "brand": p.brand, "strength": p.strength, "form": p.form, "maker": p.manufacturer,
-                      "applied": site_of(p.form) != "body"}
+                      "applied": site_of(p.form) != "body", "web": src if src.startswith("http") else None}
         return {"item_id": it.item_id, "doc_id": it.doc_id, "source": it.source, "reading": it.reading,
                 "alternatives": it.alternatives, "handwritten": it.handwritten, "agree": it.agree, "chosen": chosen,
                 "confidence": it.confidence, "method": it.method, "needs_confirm": it.needs_confirm,

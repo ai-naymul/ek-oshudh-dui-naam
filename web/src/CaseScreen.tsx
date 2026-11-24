@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Camera, FileText, Images, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
+import { Camera, FileText, Globe, Images, Keyboard, Loader2, Check, AlertCircle, Mic, Quote, Sparkles, ArrowRight, CircleHelp, Trash2, Search } from 'lucide-react'
 import { Recorder } from './Recorder'
-import { ApiError, api, bn, bnInt, shrink, statusKey, type Health, type ItemView, type Option, type Stats, type Taking } from './api'
+import { ApiError, api, bn, bnInt, shrink, statusKey, type Health, type ItemView, type Option, type Stats, type Taking, type WebBrand } from './api'
 import { useCopy, t as tt } from './copy'
 import { Press, aiReady, spring } from './Shell'
 
@@ -409,11 +409,13 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
         </>}
       </div>
       {it.chosen && <p className="mt-0.5 text-[0.9rem] text-muted">{it.chosen.form}{it.chosen.maker ? `, ${it.chosen.maker}` : ''}</p>}
+      {it.chosen?.web && <p className="mt-0.5 text-[0.9rem] text-muted">{t('web.source')}: <a href={it.chosen.web} target="_blank" rel="noreferrer" className="font-semibold text-rx underline">MedEx</a></p>}
       {chips.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{chips.map((c) => <span key={c} className="whitespace-nowrap rounded-full bg-paper px-3 py-1 text-[0.9rem] text-ink ring-1 ring-foil">{c}</span>)}</div>}
 
       {(it.needs_confirm || !it.chosen || changing) ? (
         <Abstain caseId={caseId} it={it} saving={saving} canResolve={canResolve} onCancel={changing ? () => setChanging(false) : undefined}
           onChoose={(pid) => run(() => api.confirm(caseId, it.item_id, pid, it.per_day))}
+          onWeb={(url) => run(() => api.addWeb(caseId, it.item_id, url))}
           onResolve={() => run(() => api.resolve(caseId, it.item_id))} />
       ) : <>
         <StatusChips value={it.taking} busy={saving} applied={!!it.chosen?.applied} onChange={(v) => run(() => api.status(caseId, it.item_id, v))} />
@@ -426,16 +428,18 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
 
 // When the matcher is not sure (or the person says "not right"): the photo line, the closest registered products,
 // a search over the whole registry, and an optional evidence search over the rest of the case.
-function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel }: {
+function Abstain({ caseId, it, saving, canResolve, onChoose, onWeb, onResolve, onCancel }: {
   caseId: string; it: ItemView; saving: boolean; canResolve: boolean
-  onChoose: (pid: number | null) => void; onResolve: () => void; onCancel?: () => void
+  onChoose: (pid: number | null) => void; onWeb: (url: string) => void; onResolve: () => void; onCancel?: () => void
 }) {
   const t = useCopy()
   const [searching, setSearching] = useState(false)
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Option[] | null>(null)
   const [looking, setLooking] = useState(false)
+  const [web, setWeb] = useState<{ state: 'idle' | 'busy' | 'done'; results: WebBrand[] }>({ state: 'idle', results: [] })
   void caseId
+  useEffect(() => { setWeb({ state: 'idle', results: [] }) }, [q])
   useEffect(() => {
     if (!searching || q.trim().length < 2) { setResults(null); return }
     const h = window.setTimeout(() => { api.search(q).then((r) => setResults(r.options)).catch(() => setResults([])) }, 250)
@@ -459,7 +463,8 @@ function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel
           <span><span className="font-semibold">{t('abstain.suggested')}: </span>{it.agent.reason_bn}</span></p>
       )}
       {it.agent && !it.agent.product_id && <p className="mb-3 text-[0.95rem] text-muted">{t('abstain.no_clue')}</p>}
-      <div className="space-y-2">{it.options.map(option)}</div>
+      {/* once the person types, only what they typed is shown: the earlier guesses would sit above the right answer */}
+      {!(searching && q.trim().length >= 2) && <div className="space-y-2">{it.options.map(option)}</div>}
       {!searching ? (
         <div className="mt-3 flex flex-wrap gap-x-4">
           <Press onClick={() => setSearching(true)} className="flex min-h-11 items-center gap-1.5 text-[0.95rem] font-semibold text-rx"><Search size={16} aria-hidden />{t('abstain.none')}</Press>
@@ -480,6 +485,32 @@ function Abstain({ caseId, it, saving, canResolve, onChoose, onResolve, onCancel
             {results?.map(option)}
             {results && !results.length && <p className="text-[0.95rem] text-muted">{t('abstain.no_results')}</p>}
           </div>
+          {/* not an exact name in our registry: look it up on MedEx (only the name is sent); a result is used only when tapped */}
+          {results && !results.some((o) => o.brand.toLowerCase() === q.trim().toLowerCase().split(/\s+/)[0]) && (
+            <div className="mt-3">
+              {web.state !== 'done' && (
+                <Press disabled={web.state === 'busy'} onClick={async () => {
+                  setWeb({ state: 'busy', results: [] })
+                  try { const r = await api.web(q.trim()); setWeb({ state: 'done', results: r.results }) } catch { setWeb({ state: 'done', results: [] }) }
+                }} className="flex min-h-11 items-center gap-1.5 text-[0.95rem] font-semibold text-rx disabled:opacity-60">
+                  {web.state === 'busy' ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Globe size={16} aria-hidden />}{t('web.search')}
+                </Press>
+              )}
+              {web.state === 'done' && !web.results.length && <p className="text-[0.95rem] text-muted">{t('web.none')}</p>}
+              <div className="space-y-2">
+                {web.results.map((b) => (
+                  <div key={b.url} className="rounded-xl bg-white p-3 ring-1 ring-foil">
+                    <Press disabled={saving} onClick={() => onWeb(b.url)} className="print w-full text-left">
+                      <span className="text-[1.1rem] font-semibold">{b.brand}</span> <span className="text-muted">{b.strength}</span>
+                      <span className="block break-words text-[0.85rem] text-muted">{b.form}{b.maker ? `, ${b.maker}` : ''}</span>
+                      <span className="block break-words text-[0.9rem] text-ink">{t('web.inside')}: {b.generic}</span>
+                    </Press>
+                    <a href={b.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[0.85rem] font-semibold text-rx underline">{t('web.source')}: MedEx</a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -149,12 +149,39 @@ class Graph:
     """Read-only queries over the built graph."""
 
     def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
         self.con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
         self._lock = threading.RLock()  # one connection shared by web/eval threads: serialise access
 
     def _q(self, sql: str, params: tuple = ()) -> list:
         with self._lock:
             return self.con.execute(sql, params).fetchall()
+
+    def add_product(self, brand: str, generic: str, strength: str, form: str, maker: str, source: str) -> int:
+        """A brand found outside the registry snapshot (a MedEx page) and tapped by the family. source = the page URL.
+        Written through its own connection; the shared read-only one sees it at once. Same brand+strength+form: reused."""
+        with self._lock:
+            con = sqlite3.connect(self.db_path)
+            try:
+                row = con.execute("SELECT id FROM product WHERE brand_key = ? AND strength = ? AND form = ?",
+                                  (brand_key(brand), strength, form)).fetchone()
+                if row:
+                    return row[0]
+                pid = con.execute(
+                    "INSERT INTO product (brand, brand_key, generic, strength, form, manufacturer, unit_price, package, source) "
+                    "VALUES (?,?,?,?,?,?,NULL,'',?)", (brand, brand_key(brand), generic, strength, form, maker, source)).lastrowid
+                for name, st in split_combination(generic, strength):
+                    r = con.execute("SELECT id FROM ingredient WHERE name = ?", (name,)).fetchone()
+                    iid = r[0] if r else con.execute("INSERT INTO ingredient (name) VALUES (?)", (name,)).lastrowid
+                    con.execute("INSERT OR IGNORE INTO product_ingredient VALUES (?,?,?,?)", (pid, iid, st, to_mg(st)))
+                con.commit()
+                return pid
+            finally:
+                con.close()
+
+    def source(self, pid: int) -> str:
+        rows = self._q("SELECT source FROM product WHERE id = ?", (pid,))
+        return rows[0][0] if rows else ""
 
     def products_by_brand(self, brand: str) -> list[Product]:
         rows = self._q(

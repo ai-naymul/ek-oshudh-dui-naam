@@ -208,3 +208,30 @@ test('the result is one verdict for the whole bag', async ({ page }) => {
   await page.getByRole('button', { name: /মিলিয়ে দেখুন/ }).click()
   await expect(page.getByText('পুরো ব্যাগের ফল', { exact: true })).toBeVisible()
 })
+
+// Not sure -> the family types the name: only what they typed is listed (Bicozin first, not the earlier Bilastin
+// guesses); a name our registry does not have can be looked up on MedEx and added with its source.
+test('typing a name lists it first; a missing brand can be looked up on MedEx', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /লিখে দিন/ }).click()
+  await page.locator('textarea').fill('Bicotin\nItracare SB')
+  await page.getByRole('button', { name: /যোগ করুন/ }).first().click()
+  const first = page.getByRole('article').first()
+  await first.getByRole('button', { name: /কোনোটিই নয়/ }).click()
+  await first.locator('input').fill('Bicozin')
+  const options = first.locator('button.print')
+  await expect(options.first()).toContainText('Bicozin')
+  await expect(first.getByText(/Bilastin/)).toHaveCount(0)
+
+  await page.route('**/api/brands/web?**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    results: [{ brand: 'Itracare SB', form: 'Capsule', generic: 'Itraconazole', strength: '65 mg', maker: 'Delta Pharma PLC.',
+      url: 'https://medex.com.bd/brands/38174/itracare-sb-65-mg-capsule' }], via: 'medex', request_id: 'x', latency_ms: 1 }) }))
+  const second = page.getByRole('article').nth(1)
+  await second.getByRole('button', { name: /কোনোটিই নয়/ }).click()
+  await second.locator('input').fill('Itracare SB')
+  await second.getByRole('button', { name: /ইন্টারনেটে খুঁজুন/ }).click()
+  await expect(second.getByText('ভেতরে: Itraconazole')).toBeVisible()
+  await expect(second.getByRole('link', { name: /উৎস: MedEx/ })).toHaveAttribute('href', /medex\.com\.bd\/brands\/38174/)
+  await noSideScroll(page)
+})

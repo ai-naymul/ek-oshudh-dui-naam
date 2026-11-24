@@ -23,10 +23,11 @@ export const shareUrl = () => {
   return API === window.location.origin ? page : `${page}?api=${encodeURIComponent(API)}`
 }
 
+export type WebBrand = { brand: string; form: string; generic: string; strength: string; maker: string; url: string }
 export type Option = { product_id: number; brand: string; strength: string; form: string; maker: string; generic: string; score: number }
 export type ItemView = {
   item_id: string; doc_id: string; source: string; reading: string; alternatives: string[]; handwritten: boolean
-  agree: number | null; chosen: { product_id: number; brand: string; strength: string; form: string; maker: string; applied?: boolean } | null
+  agree: number | null; chosen: { product_id: number; brand: string; strength: string; form: string; maker: string; applied?: boolean; web?: string | null } | null
   confidence: number; method: string; needs_confirm: boolean; options: Option[]
   schedule: { morning: number | null; noon: number | null; night: number | null; per_day: number | null; meal: string | null; days: number | null }
   per_day: number | null; has_crop: boolean
@@ -84,6 +85,10 @@ export const api = {
   network: () => call<{ urls: string[] }>('/api/network'),
   addText: (cid: string, text: string) =>
     call<{ items: ItemView[] }>(`/api/cases/${cid}/text`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }),
+  // Not in our registry: MedEx lookup (only the name is sent), and adding a MedEx brand page the family tapped.
+  web: (q: string) => call<{ results: WebBrand[]; via: string }>(`/api/brands/web?q=${encodeURIComponent(q)}`),
+  addWeb: (cid: string, iid: string, url: string) =>
+    call<ItemView>(`/api/cases/${cid}/items/${iid}/web`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }),
   confirm: (cid: string, iid: string, product_id: number | null, per_day?: number | null) =>
     call<ItemView>(`/api/cases/${cid}/items/${iid}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id, per_day }) }),
   addVoice: (cid: string, audio: Blob) => {

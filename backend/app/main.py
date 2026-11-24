@@ -200,6 +200,43 @@ def confirm(case_id: str, item_id: str, body: ConfirmIn):
         raise HTTPException(404, "item not found")
 
 
+@app.get("/api/brands/web")
+def brand_web(q: str):
+    """Not in our registry: look the name up on MedEx (MedEx search, then DuckDuckGo). Only the name is sent."""
+    t0 = time.time()
+    q = q.strip()
+    if not 2 <= len(q) <= 60:
+        raise HTTPException(400, "name length")
+    from app.core.web_lookup import lookup
+    return live({"query": q, **lookup(q)}, t0)
+
+
+class WebIn(BaseModel):
+    url: str = Field(max_length=200)
+
+
+@app.post("/api/cases/{case_id}/items/{item_id}/web")
+def choose_web(case_id: str, item_id: str, body: WebIn):
+    """The family tapped a MedEx result: the server fetches that page itself, adds the brand with its ingredients
+    (source = the page) and confirms the line. Only medex.com.bd brand pages are accepted."""
+    t0 = time.time()
+    from app.core.web_lookup import BRAND_URL, fetch_brand
+    if not BRAND_URL.fullmatch(body.url):
+        raise HTTPException(400, "only medex.com.bd brand pages")
+    case = _case(case_id)
+    try:
+        b = fetch_brand(body.url)
+    except Exception:
+        b = None
+    if not b:
+        raise HTTPException(502, "could not read that page")
+    pid = engine().graph.add_product(b["brand"], b["generic"], b["strength"], b["form"], b["maker"], body.url)
+    try:
+        return live(engine().confirm(case, item_id, pid), t0)
+    except StopIteration:
+        raise HTTPException(404, "item not found")
+
+
 class StatusIn(BaseModel):
     taking: Literal["current", "stopped", "unsure"]
 

@@ -86,6 +86,10 @@ scan in one photo).
 **2. Stay careful when a brand is unknown or the strip photo is unreadable, so nothing is wrongly called a duplicate.**
 - A reading the decision model is not sure of, an unknown brand, or a spoken name waits for the family's tap and is
   left out of every rule until then; the verdict says how many medicines are not checked and is never an all-clear.
+- An unknown brand: the family types the name; only what they typed is listed. If our registry has no such name, the
+  app looks it up on MedEx (the listing the registry was built from; MedEx search, DuckDuckGo as fallback; only the name
+  is sent), shows brand, ingredient, maker and the source link, and adds it only when tapped (the server fetches the
+  page itself; only medex.com.bd brand pages are accepted). From then on the rules treat it like any registered brand.
 - An unreadable photo adds nothing and says so ("ছবিটা পড়া যায়নি, তাই কোনো ওষুধ ধরে নেওয়া হয়নি").
 - A strip also prints its ingredient ("Esomeprazole USP" under Sergel MUPS). On 24 Nov a real read listed that line as
   a second medicine and the matcher offered another esomeprazole brand: one strip would have become a duplicate. Such
@@ -144,7 +148,7 @@ with still no wrong automatic accept (`tests/test_strip_reading.py` pins the cas
 ## Tests
 
 ```bash
-cd backend && uv run pytest -q          # 217 tests, no API key needed (also run in CI on every push)
+cd backend && uv run pytest -q          # 221 tests, no API key needed (also run in CI on every push)
 cd web && npm run e2e                   # end-to-end at 1440×900 and 390×844 (Playwright), see below
 python3 scripts/demo_check.py           # checks the running app end to end, with timings
 ```
