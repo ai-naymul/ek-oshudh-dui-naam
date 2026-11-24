@@ -34,9 +34,12 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
   const lead = stats?.examples.find((e) => e.ingredient === 'Paracetamol') ?? stats?.examples[0]
 
   return (
-    <motion.main className="mx-auto max-w-2xl px-5 pb-12 pt-8 lg:pt-14" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+    <motion.main className="mx-auto max-w-2xl px-5 pb-12 pt-8 lg:max-w-6xl lg:px-8 lg:pt-16" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }} transition={spring}>
-      <h1 className="display whitespace-pre-line text-[2.3rem] text-ink sm:text-[3rem]">{t('welcome.title')}</h1>
+      {/* laptop: the message and actions on the left, the moving example beside them; phone: one column */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:gap-14">
+      <div>
+      <h1 className="display whitespace-pre-line text-[2.3rem] text-ink sm:text-[3rem] lg:text-[3.6rem]">{t('welcome.title')}</h1>
       <p className="mt-4 text-[1.05rem] text-muted">
         {lead ? t('welcome.lead', { ingredient: lead.ingredient, n: bnInt(lead.brand_count) }) : t('welcome.lead_plain')}
       </p>
@@ -50,8 +53,9 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
         </Press>
       </div>
       <p className="mt-4 text-[0.95rem] text-muted">{t('welcome.how')}</p>
+      </div>
 
-      <section aria-label={t('welcome.example_head')} className="sheet lift mt-10 px-5 py-6 sm:px-7"
+      <section aria-label={t('welcome.example_head')} className="sheet lift mt-10 px-5 py-6 sm:px-7 lg:mt-0"
         onPointerEnter={() => setHold(true)} onPointerLeave={() => setHold(false)}
         onFocus={() => setHold(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHold(false) }}>
         <p className="print text-[0.95rem] font-semibold text-rx">℞ {t('welcome.example_head')}</p>
@@ -68,9 +72,15 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
         </div>
         {ex && (
           <div className="mt-4 flex items-center gap-3 border-t border-foil pt-4">
-            <p className="min-w-0 flex-1 text-[0.95rem] text-muted">
-              {t('welcome.example_caption', { ingredient: ex.ingredient, n: bnInt(ex.brand_count), more: ex.brands.slice(2, 5).join(', ') })}
-            </p>
+            {/* changes together with the picture above (same key and timing), never ahead of it */}
+            <div className="min-w-0 flex-1">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.p key={ex.ingredient} className="text-[0.95rem] text-muted" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  {t('welcome.example_caption', { ingredient: ex.ingredient, n: bnInt(ex.brand_count), more: ex.brands.slice(2, 5).join(', ') })}
+                </motion.p>
+              </AnimatePresence>
+            </div>
             <div className="flex shrink-0 gap-1">
               <Press onClick={() => pick(-1)} aria-label={t('welcome.example_prev')} className="grid h-11 w-11 place-items-center rounded-full bg-paper"><ChevronLeft size={20} /></Press>
               {!reduce && examples.length > 1 && (
@@ -83,8 +93,9 @@ export function Welcome({ stats, onStart, onSample, busy }: { stats: Stats | nul
         )}
         {stats?.eval && <p className="mt-4 text-[0.95rem] text-rx-deep">{t('welcome.tested', { n: bnInt(stats.eval.n_test) })} ({bnPct(stats.eval.top1)})</p>}
       </section>
+      </div>
 
-      <footer className="mt-8 text-[0.9rem] text-muted">
+      <footer className="mt-8 text-[0.9rem] text-muted lg:mt-12">
         <p>{t('app.disclaimer')}</p>
         <p className="mt-1 font-semibold">{t('app.team')}</p>
       </footer>
