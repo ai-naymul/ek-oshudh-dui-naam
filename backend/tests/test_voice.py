@@ -80,3 +80,16 @@ def test_speech_text_comes_only_from_findings():
 def test_confirm_message_names_the_real_cause(source, handwritten, phrase):
     f = Finding("CONFIRM_FIRST", "info", ["M1"], {"brand": "Napa", "source": source, "handwritten": handwritten}, "x")
     assert phrase in explain(f)["bn"]
+
+
+def test_the_same_spoken_reply_is_made_only_once(monkeypatch):
+    # The result page asks for the reply audio as soon as it appears; asking again (the tap) must not wait again.
+    import app.ai.speech as speech
+    from app.conversation import Engine
+    calls = []
+    monkeypatch.setattr(speech, "speak_bn", lambda text: (calls.append(text) or b"RIFF", "audio/wav", {"model": "fake"}))
+    e = Engine()
+    case = e.new_case()
+    e.add_text(case, "Napa 500\nAce 500")
+    assert e.speech(case)[0] == e.speech(case)[0] == b"RIFF"
+    assert len(calls) == 1

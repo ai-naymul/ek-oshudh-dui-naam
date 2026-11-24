@@ -419,12 +419,21 @@ class Engine:
         self._commit(case, new, steps)
         return {"transcript": transcript, "items": [self.item_view(i) for i in new]}
 
+    _SPEECH: dict[str, tuple[bytes, str]] = {}   # reply text -> audio: the same findings are spoken with the same words
+
     def speech(self, case: Case) -> tuple[bytes, str, str]:
-        from app.ai.speech import findings_speech, speak_bn
+        """The result page asks for this as soon as it appears, so the tap plays at once; the same text is made once."""
+        from app.ai import speech as sp
         result = self.check(case)
-        text = findings_speech(result["findings"], result["unchecked"])
+        text = sp.findings_speech(result["findings"], result["unchecked"])
         t0 = time.time()
-        audio, mime, meta = speak_bn(text)
+        if text in self._SPEECH:
+            (audio, mime), meta = self._SPEECH[text], {"model": "cache"}
+        else:
+            audio, mime, meta = sp.speak_bn(text)
+            self._SPEECH[text] = (audio, mime)
+            while len(self._SPEECH) > 64:
+                self._SPEECH.pop(next(iter(self._SPEECH)))
         case.step("speak", t0, model=meta.get("model"), chars=len(text))
         return audio, mime, text
 

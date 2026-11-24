@@ -180,24 +180,34 @@ function MedRow({ m }: { m: Medicine }) {
   )
 }
 
-// Bangla voice reply: the template text of the findings, spoken by the TTS model on the server. Tap to play.
+// Bangla voice reply: the template text of the findings, spoken by the TTS model on the server. It is prepared as
+// soon as the result appears (this component is remounted for every new result), so a tap plays at once.
 function Listen({ caseId }: { caseId: string }) {
   const t = useCopy()
   const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
   const audio = useRef<HTMLAudioElement | null>(null)
   const url = useRef<string | null>(null)
+  const ready = useRef<Promise<string> | null>(null)
   const alive = useRef(true)
-  useEffect(() => { alive.current = true; return () => { alive.current = false; audio.current?.pause(); if (url.current) URL.revokeObjectURL(url.current) } }, [])
+  const prepare = () => {
+    ready.current = api.speech(caseId).then((b) => { url.current = URL.createObjectURL(b); return url.current })
+    ready.current.catch(() => { ready.current = null })      // a failed preparation is retried on the tap
+    return ready.current
+  }
+  useEffect(() => {
+    alive.current = true
+    const h = window.setTimeout(() => { if (!ready.current) prepare() }, 600)
+    return () => { window.clearTimeout(h); alive.current = false; audio.current?.pause(); if (url.current) URL.revokeObjectURL(url.current) }
+  }, [caseId])
   async function toggle() {
     if (state === 'loading') return
     if (state === 'playing') { audio.current?.pause(); setState('idle'); return }
     setState('loading')
     try {
       if (!audio.current) {
-        const blob = await api.speech(caseId)
+        const u = await (ready.current ?? prepare())
         if (!alive.current) return
-        url.current = URL.createObjectURL(blob)
-        audio.current = new Audio(url.current)
+        audio.current = new Audio(u)
         audio.current.onended = () => setState('idle')
       }
       audio.current.currentTime = 0

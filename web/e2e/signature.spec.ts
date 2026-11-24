@@ -235,3 +235,14 @@ test('typing a name lists it first; a missing brand can be looked up on MedEx', 
   await expect(second.getByRole('link', { name: /উৎস: MedEx/ })).toHaveAttribute('href', /medex\.com\.bd\/brands\/38174/)
   await noSideScroll(page)
 })
+
+// The voice reply is prepared as soon as the result appears, so tapping শুনুন does not wait for it.
+test('the spoken reply is prepared before the tap', async ({ page }) => {
+  let asked = 0
+  await page.route('**/speech', (r) => { asked++; return r.fulfill({ status: 200, contentType: 'audio/wav', body: Buffer.alloc(64) }) })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'নমুনা দেখুন' }).click()
+  await page.getByRole('button', { name: /মিলিয়ে দেখুন/ }).click()
+  await expect(page.getByText('পুরো ব্যাগের ফল', { exact: true })).toBeVisible()
+  await expect.poll(() => asked, { timeout: 5000 }).toBeGreaterThanOrEqual(1)
+})
