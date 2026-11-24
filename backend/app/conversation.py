@@ -51,6 +51,13 @@ def _parse_date(text: str) -> tuple | None:
 
 EXACT_AGREE = 0.9   # both photo readers wrote (nearly) the same brand text
 
+# A diagnosis line is not a medicine (24 Nov: 'T. corporis' on a dermatologist's prescription was read as a tablet).
+# The reader is told so; this catches the plain cases it still lists. 'T.' before a Latin skin-disease name is Tinea.
+_DIAGNOSIS = re.compile(
+    r"^\s*(t\.?\s*|tinea\s+)(corporis|cruris|capitis|pedis|versicolou?r|faciei|manuum|unguium|incognito|barbae)\b"
+    r"|^\s*(scabies|acne(\s+vulgaris)?|eczema|psoriasis|urticaria|dermatitis|pityriasis|melasma|vitiligo|impetigo"
+    r"|hypertension|htn|diabetes|gerd|urti|c/o|dx|d/d|o/e)\b", re.I)
+
 # Voiced and voiceless partners that speech recognition swaps at the start of a word (টেস heard for ডেস).
 _SOUND_PAIRS = {"t": "d", "d": "t", "k": "g", "g": "k", "p": "b", "b": "p", "c": "j", "j": "c"}
 VOICE_VARIANT_WEIGHT = 0.9  # a sound-alike must be clearly better than what was heard to come first
@@ -302,6 +309,7 @@ class Engine:
         from app.ai.perceive import crop, read_image
         t0 = time.time()
         read = read_image(data)
+        read["items"] = [it for it in read.get("items", []) if not _DIAGNOSIS.search(it.get("brand_text", "") or "")]
         sig = self._doc_signature(read)
         if read["kind"] == "prescription" and not allow_repeat:
             seen = next((d for d in case.docs if d.get("sig") and self._same_prescription(sig, d["sig"])), None)

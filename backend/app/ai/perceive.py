@@ -31,7 +31,11 @@ For each medicine line give:
 For a strip or box: the same medicine is printed many times, in English and in Bangla, often with its ingredients.
 Give each different medicine product ONCE: brand_text is the brand name in English letters (the Bangla name only if no
 English one is printed); put ingredient names in generic_text, never as separate medicines.
-Also give kind and, for prescriptions, doctor_text (doctor or clinic name only) and date_text."""
+Only MEDICINES go in items. The diagnosis, complaints, findings, tests and advice are not medicines: Bangladeshi
+prescriptions often write the diagnosis at the top or on the left (C/C, Dx, D/D, O/E), for example 'T. corporis',
+'T. cruris', 'T. capitis', 'T. versicolor', 'Scabies', 'Acne', 'HTN', 'DM'. There 'T.' means Tinea (a skin disease),
+not Tablet. Put the diagnosis in diagnosis_text, never in items.
+Also give kind and, for prescriptions, doctor_text (doctor or clinic name only), date_text and diagnosis_text."""
 
 SCHEMA = {
     "type": "object",
@@ -39,6 +43,7 @@ SCHEMA = {
         "kind": {"type": "string", "enum": ["prescription", "strip", "box", "other"]},
         "doctor_text": {"type": "string"},
         "date_text": {"type": "string"},
+        "diagnosis_text": {"type": "string"},
         "items": {"type": "array", "items": {"type": "object", "properties": {
             "brand_text": {"type": "string"},
             "alternatives": {"type": "array", "items": {"type": "string"}},

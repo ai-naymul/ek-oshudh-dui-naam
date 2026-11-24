@@ -22,6 +22,8 @@ export function Recorder({ onDone, onClose }: { onDone: (audio: Blob) => void; o
     let stream: MediaStream | null = null
     let timer: number | undefined
     let cancelled = false
+    // Phones allow the microphone only on https pages; on an http address the browser hides it before any prompt.
+    if (!window.isSecureContext) { setError(tt('rec.needs_https')); return }
     if (!navigator.mediaDevices) { setError(tt('rec.unsupported')); return }
     navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => {
       if (cancelled) { s.getTracks().forEach((tr) => tr.stop()); return }   // closed while the permission prompt was open
@@ -57,7 +59,12 @@ export function Recorder({ onDone, onClose }: { onDone: (audio: Blob) => void; o
   return (
     <Sheet label={t('rec.title')} onClose={() => stop(false)}>
       <p className="mt-1 text-muted">{t('rec.example')}</p>
-      {error ? <p role="alert" className="mt-6 rounded-xl bg-danger-soft p-3 text-danger">{error}</p> : (
+      {error ? <div role="alert" className="mt-6 rounded-xl bg-danger-soft p-3 text-danger">
+          <p>{error}</p>
+          {!window.isSecureContext && /^\d+\.\d+\.\d+\.\d+$/.test(location.hostname) && (
+            <a href={`https://${location.hostname}:8443${location.pathname}`} className="mt-2 inline-block font-semibold underline">{`https://${location.hostname}:8443`}</a>
+          )}
+        </div> : (
         <div className="mt-6 flex flex-col items-center">
           <div className="relative grid h-28 w-28 place-items-center">
             {!reduce && <motion.span className="absolute inset-0 rounded-full bg-danger/15" animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }} />}

@@ -104,3 +104,18 @@ def test_c2_a_real_brand_named_after_an_ingredient_is_still_a_medicine(client, m
     cid = client.post("/api/cases").json()["case_id"]
     out = photo(client, monkeypatch, cid, [("Itchsol", "", ""), ("Calamine", "", "")])
     assert sorted(i["chosen"]["brand"] for i in out["items"]) == ["Calamine", "Itchsol"]
+
+
+# 24 Nov, real dermatologist prescription: the diagnosis 'T. corporis' (tinea corporis) was sometimes listed as a
+# medicine ('T.' read as Tablet) and matched to a drug. A diagnosis is not a medicine.
+def test_the_reader_is_told_a_diagnosis_is_not_a_medicine():
+    from app.ai.perceive import PROMPT, SCHEMA
+    assert "diagnosis" in PROMPT.lower() and "tinea" in PROMPT.lower()
+    assert "diagnosis_text" in SCHEMA["properties"]
+
+
+@pytest.mark.parametrize("line", ["T. corporis", "T. cruris c BA", "Tinea versicolor", "T.capitis", "Scabies", "Acne vulgaris"])
+def test_c2_a_diagnosis_line_is_not_added_as_a_medicine(client, monkeypatch, line):
+    cid = client.post("/api/cases").json()["case_id"]
+    out = photo(client, monkeypatch, cid, [(line, "", ""), ("Des", "5 mg", "")], kind="prescription")
+    assert [i["chosen"]["brand"] for i in out["items"]] == ["Des"]
