@@ -323,12 +323,33 @@ class Engine:
         return overlap >= 0.75 or (overlap >= 0.5 and same_doctor)
 
     def add_image(self, case: Case, data: bytes, allow_repeat: bool = False, upload_id: str | None = None) -> dict:
-        out = self._add_image(case, data, allow_repeat)
-        if upload_id:   # the phone can lose this answer (camera opened); it asks the case later what each upload gave
+        """The case records each upload from the moment it arrives (reading -> done | failed): the phone can lose this
+        answer (Android drops the connection when the camera opens, or reloads the page) and asks the case instead."""
+        uid = upload_id[:64] if upload_id else None
+        if uid:
             with case.lock:
-                case.uploads[upload_id[:64]] = {"doc_id": out["doc_id"], "duplicate_of": out["duplicate_of"],
-                                                "items": [i["item_id"] for i in out["items"]]}
+                case.uploads[uid] = {"state": "reading", "started": time.time(), "doc_id": None, "duplicate_of": None, "items": []}
+        try:
+            out = self._add_image(case, data, allow_repeat)
+        except Exception:
+            if uid:
+                with case.lock:
+                    case.uploads[uid]["state"] = "failed"
+            raise
+        if uid:
+            with case.lock:
+                case.uploads[uid].update(state="done", doc_id=out["doc_id"], duplicate_of=out["duplicate_of"],
+                                         items=[i["item_id"] for i in out["items"]])
         return out
+
+    UPLOAD_STUCK_SECONDS = 180
+
+    def uploads_view(self, case: Case) -> dict:
+        """An upload still 'reading' long after it started was cut off (a server restart): report it as failed."""
+        now = time.time()
+        with case.lock:
+            return {k: ({**u, "state": "failed"} if u.get("state") == "reading" and now - u.get("started", now) > self.UPLOAD_STUCK_SECONDS
+                        else u) for k, u in case.uploads.items()}
 
     def _add_image(self, case: Case, data: bytes, allow_repeat: bool = False) -> dict:
         from app.ai.gemini import image_part

@@ -283,3 +283,95 @@ test('a photo whose answer is lost still shows its medicines (connection dropped
   await expect(page.getByText(/পৌঁছায়নি/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: /মিলিয়ে দেখুন/ })).toBeEnabled()
 })
+
+// Race: an older copy of the case (asked for while photo A's connection broke) must not wipe the cards photo B added
+// meanwhile. 24 Nov: two prescriptions and then the bag, quickly; one prescription's cards never appeared.
+test('a late copy of the case never removes cards that arrived meanwhile', async ({ page }) => {
+  const card = (id: string, brand: string) => ({ item_id: id, doc_id: id, source: 'rx', reading: brand, alternatives: [], handwritten: true,
+    agree: null, chosen: { product_id: 1, brand, strength: '10 mg', form: 'Tablet', maker: 'X', applied: false, web: null }, confidence: 0.99,
+    method: 'R2', needs_confirm: false, options: [], schedule: {}, per_day: null, has_crop: false, agent: null, doctor: 'Dr', taking: 'unsure' })
+  const ids: string[] = []
+  await page.route('**/images', async (route) => {
+    const body = route.request().postDataBuffer()?.toString('latin1') ?? ''
+    const id = /name="upload_id"\r\n\r\n([^\r]+)/.exec(body)?.[1] ?? ''
+    ids.push(id)
+    if (ids.length === 1) return route.abort('connectionreset')                    // photo A: connection lost
+    await new Promise((r) => setTimeout(r, 400))                                   // photo B: answers while the copy is on its way
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ doc_id: 'D2', duplicate_of: null, kind: 'prescription',
+      items: [card('I2', 'Alatrol')], request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.route(/\/api\/cases\/[^/]+$/, async (route) => {
+    if (route.request().method() !== 'GET' || !ids.length) return route.continue()
+    await new Promise((r) => setTimeout(r, 1500))                                  // the copy is slow: taken before B finished
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ case_id: 'x', items: [card('I1', 'Des')],
+      uploads: { [ids[0]]: { doc_id: 'D1', duplicate_of: null, items: ['I1'] } }, request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  await page.locator('input[type=file][multiple]').setInputFiles([1, 2].map((i) => ({ name: `rx${i}.png`, mimeType: 'image/png', buffer: PNG })))
+  await page.waitForTimeout(4000)
+  await expect(page.getByRole('article')).toHaveCount(2)
+  await expect(page.getByRole('article').filter({ hasText: 'Alatrol' })).toHaveCount(1)
+})
+
+const fakeCard = (id: string, brand: string, source = 'rx', needs = false) => ({ item_id: id, doc_id: source === 'voice' ? null : id, source,
+  reading: brand, alternatives: [], handwritten: source === 'rx', agree: null,
+  chosen: { product_id: 1, brand, strength: '10 mg', form: 'Tablet', maker: 'X', applied: false, web: null }, confidence: 0.99, method: 'R2',
+  needs_confirm: needs, options: needs ? [{ product_id: 1, brand, strength: '10 mg', form: 'Tablet', maker: 'X' }] : [], schedule: {}, per_day: null,
+  has_crop: false, agent: null, doctor: 'Dr', taking: 'unsure' })
+
+// Android can reload the page after the camera. A photo the server is still reading must still arrive on screen,
+// and the bag must not be checked before it does.
+test('after a reload, a photo the server is still reading still arrives, and checking waits for it', async ({ page }) => {
+  let calls = 0
+  await page.route(/\/api\/cases\/x1$/, async (route) => {
+    calls += 1
+    const done = calls >= 3
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ case_id: 'x1',
+      items: done ? [fakeCard('I1', 'Des'), fakeCard('I2', 'Exium')] : [fakeCard('I1', 'Des')],
+      uploads: { u9: done ? { state: 'done', doc_id: 'D2', duplicate_of: null, items: ['I2'] } : { state: 'reading', doc_id: null, duplicate_of: null, items: [] } },
+      request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/?case=x1')
+  await expect(page.getByText(/এখনো পড়া হচ্ছে/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /মিলিয়ে দেখুন/ })).toBeDisabled()
+  await expect(page.getByRole('article').filter({ hasText: 'Exium' })).toHaveCount(1, { timeout: 15000 })
+  await expect(page.getByText(/এখনো পড়া হচ্ছে/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /মিলিয়ে দেখুন/ })).toBeEnabled()
+})
+
+// A copy of the case fetched while photos are read must never bring back a card the family removed.
+test('a removed card stays removed while photos are still being read', async ({ page }) => {
+  await page.route('**/images', async (route) => { await new Promise((r) => setTimeout(r, 20000)); await route.abort('connectionreset') })
+  await page.route(/\/api\/cases\/[^/]+\/items\/I1$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }))
+  await page.route(/\/api\/cases\/[^/]+$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ case_id: 'x', items: [fakeCard('I1', 'Des')],
+      uploads: {}, request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  await page.locator('input[type=file][multiple]').setInputFiles({ name: 'rx.png', mimeType: 'image/png', buffer: PNG })
+  await expect(page.getByRole('article').filter({ hasText: 'Des' })).toHaveCount(1, { timeout: 10000 })   // brought by the case copy
+  await page.getByRole('button', { name: 'বাদ দিন: Des' }).click()
+  await page.waitForTimeout(10000)                                        // past the undo window and two more copies
+  await expect(page.getByRole('article').filter({ hasText: 'Des' })).toHaveCount(0)
+})
+
+// 24 Nov: deleting cards quickly, they did not go away at once (and one came back). A deleted card leaves at once.
+test('deleting cards one after another removes each at once', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await page.getByRole('button', { name: /লিখে দিন/ }).first().click()
+  await page.locator('#typed').fill('Napa 500\nAce 500\nSeclo 20')
+  await page.getByRole('button', { name: /যোগ করুন/ }).click()
+  await expect(page.getByRole('article')).toHaveCount(3, { timeout: 15000 })
+  for (const [brand, left] of [['Napa', 2], ['Ace', 1]] as const) {
+    await page.getByRole('button', { name: `বাদ দিন: ${brand}` }).click()
+    await expect(page.getByRole('article')).toHaveCount(left, { timeout: 300 })
+  }
+  await page.waitForTimeout(6000)
+  await expect(page.getByRole('article')).toHaveCount(1)
+})

@@ -9,8 +9,9 @@ import { Press, aiReady, spring } from './Shell'
 // For several photos at once: which one is being read (n of 'of') and how many medicines each finished one gave.
 type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string; n?: number; of?: number; done?: number[] } | null
 // One row per photo being read. Photos are read at the same time, and more can be added while they are read.
-type Photo = { id: number; preview: string; state: 'reading' | 'done' | 'none' | 'failed' | 'repeat'; found: number; uploadId: string; started: number }
+type Photo = { id: number; preview: string; state: 'reading' | 'done' | 'none' | 'failed' | 'repeat'; found: number; uploadId: string; started: number; lost?: number }
 const PHOTO_GIVE_UP_MS = 150_000   // no answer and not in the case after this long: show 'try again'
+const PHOTO_LOST_MS = 8_000        // the connection broke and the server never got the photo: 'try again' soon
 type Pending = { item: ItemView; index: number; timer: number } | null
 
 function errorText(e: unknown, kind: 'image' | 'voice' | 'text'): string {
@@ -46,6 +47,11 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const [photos, setPhotos] = useState<Photo[]>([])
   const photoSeq = useRef(0)
   const reading = photos.some((p) => p.state === 'reading')
+  const photosRef = useRef(photos)
+  photosRef.current = photos
+  const [serverBusy, setServerBusy] = useState(false)   // the server is reading a photo this page did not send (after a reload)
+  const gone = useRef(new Set<string>())                // removed by the family: a copy of the case never brings them back
+  const [fresh, setFresh] = useState<string[]>([])      // cards just heard by voice: shown under what was heard, outlined
   const ready = aiReady(health)
   const noKey = health ? !health.ai.key_present : false
   // late answers from a case that is no longer on screen must not land in the new one
@@ -55,8 +61,6 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   const addItems = (more: ItemView[]) => { if (alive.current) setItems((prev) => [...prev, ...more.filter((m) => !prev.some((p) => p.item_id === m.item_id))]) }
   const controllers = useRef(new Map<number, AbortController>())
   const blobs = useRef(new Map<number, Blob>())
-  const pendingRef = useRef<Pending>(null)
-  pendingRef.current = pending   // a card removed but still undoable stays hidden when the case is re-read
   const fail = (msg: string) => { if (alive.current) setError(msg) }
 
   // Remove with undo: the line disappears at once; the server forgets it after 5 s unless the person taps undo.
@@ -68,6 +72,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   function remove(it: ItemView) {
     if (pending) flushRemove(pending)
     const index = items.findIndex((x) => x.item_id === it.item_id)
+    gone.current.add(it.item_id)
     setItems((prev) => prev.filter((x) => x.item_id !== it.item_id))
     const timer = window.setTimeout(() => { flushRemove({ item: it, index, timer: 0 }); setPending(null) }, 5000)
     setPending({ item: it, index, timer })
@@ -76,6 +81,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     if (!pending) return
     window.clearTimeout(pending.timer)
     const p = pending
+    gone.current.delete(p.item.item_id)
     setItems((prev) => { const next = [...prev]; next.splice(Math.min(p.index, next.length), 0, p.item); return next })
     setPending(null)
   }
@@ -95,6 +101,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       if (!alive.current) return
       setHeard((h) => [...h, res.transcript])
       addItems(res.items)
+      setFresh(res.items.map((i) => i.item_id))
       if (!res.items.length) fail(tt('err.no_items_voice'))
     } catch (e) { fail(errorText(e, 'voice')) }
     if (alive.current) setBusy(null)
@@ -122,6 +129,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     } catch (e) {
       if (ctrl.signal.aborted) return                                   // already finished from the case (sync)
       if (e instanceof ApiError) { fail(errorText(e, 'image')); set({ state: 'failed' }); return }   // the server said no
+      set({ lost: Date.now() })
       void sync()          // the connection broke (e.g. the camera opened): the server may have read and saved it anyway
     }
   }
@@ -131,27 +139,54 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
     try {
       const c = await api.getCase(caseId)
       if (!alive.current) return
-      const hidden = pendingRef.current?.item.item_id
-      setItems(() => c.items.filter((i) => i.item_id !== hidden))
-      setPhotos((ps) => ps.map((p) => {
-        if (p.state !== 'reading') return p
-        const u = c.uploads?.[p.uploadId]
-        if (!u) return Date.now() - p.started > PHOTO_GIVE_UP_MS ? { ...p, state: 'failed' } : p
+      // Only ADD cards this page does not have. This copy can be older than what happened meanwhile: replacing the
+      // list once wiped a whole prescription; updating a card could undo a confirmation; a removed card stays removed.
+      setItems((prev) => {
+        const known = new Set(prev.map((p) => p.item_id))
+        const add = c.items.filter((i) => !known.has(i.item_id) && !gone.current.has(i.item_id))
+        return add.length ? [...prev, ...add] : prev
+      })
+      const ups = c.uploads ?? {}
+      const now = Date.now()
+      const patches = new Map<number, Partial<Photo>>()
+      for (const p of photosRef.current) {
+        if (p.state !== 'reading') continue
+        const u = ups[p.uploadId]
+        if (!u) {      // the server never got it (connection broke while sending), or not yet
+          if ((p.lost && now - p.lost > PHOTO_LOST_MS) || now - p.started > PHOTO_GIVE_UP_MS) patches.set(p.id, { state: 'failed' })
+          continue
+        }
+        if (u.state === 'reading') continue
         controllers.current.get(p.id)?.abort()
+        if (u.state === 'failed') { patches.set(p.id, { state: 'failed' }); continue }
         if (u.duplicate_of) { const b = blobs.current.get(p.id); if (b) setRepeat(b) }
-        return { ...p, state: u.duplicate_of ? 'repeat' : u.items.length ? 'done' : 'none', found: u.items.length }
-      }))
+        patches.set(p.id, { state: u.duplicate_of ? 'repeat' : u.items.length ? 'done' : 'none', found: u.items.length })
+      }
+      if (patches.size) setPhotos((ps) => ps.map((p) => (p.state === 'reading' && patches.has(p.id) ? { ...p, ...patches.get(p.id) } : p)))
+      const mine = new Set(photosRef.current.map((p) => p.uploadId))
+      setServerBusy(Object.entries(ups).some(([k, u]) => u.state === 'reading' && !mine.has(k)))
     } catch { /* offline for a moment: the next round asks again */ }
   }, [caseId, setItems])
 
   // Coming back from the camera, and every few seconds while a photo is being read: ask the case.
   useEffect(() => {
-    if (!reading) return
+    if (!reading && !serverBusy) return
     const onVisible = () => { if (document.visibilityState === 'visible') void sync() }
     document.addEventListener('visibilitychange', onVisible)
-    const h = window.setInterval(() => { void sync() }, 4000)
+    const h = window.setInterval(() => { void sync() }, serverBusy && !reading ? 2500 : 4000)
     return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(h) }
-  }, [reading, sync])
+  }, [reading, serverBusy, sync])
+  // Opened again (a reload after the camera, or the link): is the server still reading a photo for this case?
+  useEffect(() => { void sync() }, [sync])
+
+  // Just heard: bring what was heard and its cards into view, outlined for a few seconds.
+  useEffect(() => {
+    if (!fresh.length) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    document.getElementById('heard-last')?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' })
+    const h = window.setTimeout(() => setFresh([]), 6000)
+    return () => window.clearTimeout(h)
+  }, [fresh])
 
   function retryPhoto(p: Photo) {
     const b = blobs.current.get(p.id)
@@ -258,6 +293,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
           {photos.length === 1 && reading && <Working busy={{ kind: 'image', preview: photos[0].preview }} products={stats?.products} />}
           {(photos.length > 1 || photos.some((p) => p.state === 'failed')) && <PhotoProgress photos={photos} onRetry={retryPhoto} />}
         </AnimatePresence>
+        {serverBusy && !reading && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl bg-rx-soft p-3 text-[1rem] text-rx-deep"><Loader2 size={18} className="shrink-0 animate-spin" aria-hidden />{t('photos.server_reading')}</p>}
         {doneNote && !busy && <p role="status" className="mt-4 flex items-start gap-2 rounded-xl bg-rx-soft p-3 text-[1rem] text-rx-deep"><Check className="mt-1 shrink-0" size={18} strokeWidth={3} aria-hidden />{doneNote}</p>}
         <AnimatePresence>
           {repeat && (
@@ -271,17 +307,18 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       </div>
 
       {heard.map((h, k) => (
-        <p key={k} className="mt-4 flex gap-2 rounded-2xl bg-white p-3 text-[1rem] ring-1 ring-foil">
-          <Quote size={16} className="mt-1 shrink-0 text-pen" /><span><span className="text-muted">{t('heard')}: </span><span className="text-pen">{h}</span></span>
+        <p key={k} id={k === heard.length - 1 ? 'heard-last' : undefined} className="mt-4 flex scroll-mt-24 gap-2 rounded-2xl bg-white p-3 text-[1rem] ring-1 ring-foil">
+          <Quote size={16} className="mt-1 shrink-0 text-pen" /><span><span className="text-muted">{t('heard')}: </span><span className="text-pen">{h}</span>
+            {k === heard.length - 1 && items.some((i) => i.source === 'voice' && i.needs_confirm) && <span className="mt-1 block font-semibold text-ink">{t('heard.confirm')}</span>}</span>
         </p>
       ))}
 
       {!items.length && !busy && !reading ? <Empty /> : (
         <ul className="mt-6 space-y-4">
           <AnimatePresence initial={false}>
-            {items.map((it) => (
-              <motion.li key={it.item_id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, marginTop: 0 }} transition={spring}>
-                <MedicineCard caseId={caseId} it={it} onUpdate={update} onRemove={() => remove(it)} canResolve={others(it)} />
+            {[...items.filter((i) => i.source === 'voice'), ...items.filter((i) => i.source !== 'voice')].map((it) => (   // spoken ones right under what was heard
+              <motion.li key={it.item_id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, marginTop: 0, transition: { duration: 0.12 } }} transition={spring}>
+                <MedicineCard caseId={caseId} it={it} onUpdate={update} onRemove={() => remove(it)} canResolve={others(it)} highlight={fresh.includes(it.item_id)} />
               </motion.li>
             ))}
           </AnimatePresence>
@@ -301,7 +338,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
       <div className="glass-strong fixed inset-x-0 bottom-0 z-20 border-t border-foil px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto max-w-2xl">
           <p className={`mb-2 h-6 whitespace-nowrap text-center text-[0.95rem] font-semibold text-warn ${unconfirmed ? '' : 'invisible'}`}>{t('check.pending', { n: bn(unconfirmed) })}</p>
-          <Press onClick={check} disabled={!items.length || !!busy || reading || checking}
+          <Press onClick={check} disabled={!items.length || !!busy || reading || serverBusy || checking}
             className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-[1.15rem] font-semibold text-white disabled:opacity-40">
             {checking && <Loader2 size={20} className="animate-spin" />}
             {t('check.button')}{items.length ? ` (${t('check.count', { n: bn(items.length) })})` : ''}
@@ -413,7 +450,7 @@ function StatusChips({ value, onChange, busy, applied }: { value: Taking; onChan
   )
 }
 
-function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: string; it: ItemView; onUpdate: (v: ItemView) => void; onRemove: () => void; canResolve: boolean }) {
+function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve, highlight = false }: { caseId: string; it: ItemView; onUpdate: (v: ItemView) => void; onRemove: () => void; canResolve: boolean; highlight?: boolean }) {
   const t = useCopy()
   const [cropOk, setCropOk] = useState(true)
   const [changing, setChanging] = useState(false)
@@ -435,7 +472,7 @@ function MedicineCard({ caseId, it, onUpdate, onRemove, canResolve }: { caseId: 
   }
 
   return (
-    <article className="sheet p-4" aria-label={it.chosen?.brand ?? it.reading}>
+    <article className={`sheet p-4 transition-[outline-color] duration-700 ${highlight ? 'outline-3 outline-offset-2 outline-pen' : 'outline-0 outline-transparent'}`} aria-label={it.chosen?.brand ?? it.reading}>
       {/* the source (which prescription, or the bag) gets its own full-width line: a long doctor's name is never cut off */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex shrink-0 items-center gap-1">

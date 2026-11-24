@@ -69,7 +69,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   stats: () => call<Stats>('/api/stats'),
   newCase: () => call<{ case_id: string }>('/api/cases', { method: 'POST' }),
-  getCase: (cid: string) => call<{ case_id: string; items: ItemView[]; uploads?: Record<string, { doc_id: string | null; duplicate_of: string | null; items: string[] }> }>(`/api/cases/${encodeURIComponent(cid)}`),
+  getCase: (cid: string) => call<{ case_id: string; items: ItemView[]; uploads?: Record<string, { state?: 'reading' | 'done' | 'failed'; doc_id: string | null; duplicate_of: string | null; items: string[] }> }>(`/api/cases/${encodeURIComponent(cid)}`),
   // upload_id: the phone can lose this answer (Android drops the connection when the camera opens); the case then says
   // what this upload gave (getCase().uploads).
   addImage: (cid: string, file: Blob, allowRepeat = false, uploadId?: string, signal?: AbortSignal) => {

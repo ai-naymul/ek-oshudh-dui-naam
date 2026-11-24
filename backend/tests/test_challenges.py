@@ -136,3 +136,31 @@ def test_the_case_says_which_uploads_are_finished(client, monkeypatch):
     case = client.get(f"/api/cases/{cid}").json()
     assert len(case["uploads"]["u-1"]["items"]) == 2 and len(case["uploads"]["u-2"]["items"]) == 1
     assert case["uploads"]["u-3"]["duplicate_of"] is not None            # the same prescription again
+
+
+def test_an_upload_is_known_as_reading_while_it_is_read_and_failed_if_reading_fails(client, monkeypatch):
+    # A phone that reloads (Android, after the camera) must see that a photo is still being read, and wait for it.
+    import threading
+    import app.ai.perceive as perceive
+    from app.ai.gemini import GeminiError
+    from tests.test_api import fake_read
+    from tests.test_robustness import jpg
+    cid = client.post("/api/cases").json()["case_id"]
+    gate, seen = threading.Event(), {}
+    slow = fake_read([("Napa", "500 mg", "")], kind="strip")
+
+    def read(data):
+        seen["during"] = client.get(f"/api/cases/{cid}").json()["uploads"]["u-slow"]["state"]
+        gate.wait(5)
+        return slow(data)
+    monkeypatch.setattr(perceive, "read_image", read)
+    gate.set()
+    client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")}, data={"upload_id": "u-slow"})
+    assert seen["during"] == "reading"
+    assert client.get(f"/api/cases/{cid}").json()["uploads"]["u-slow"]["state"] == "done"
+
+    def broken(data):
+        raise GeminiError("model down")
+    monkeypatch.setattr(perceive, "read_image", broken)
+    client.post(f"/api/cases/{cid}/images", files={"file": ("b.jpg", jpg(), "image/jpeg")}, data={"upload_id": "u-bad"})
+    assert client.get(f"/api/cases/{cid}").json()["uploads"]["u-bad"]["state"] == "failed"

@@ -40,7 +40,8 @@ export default function App() {
     api.getCase(cid).then(async (c) => {
       setCaseId(c.case_id)
       setItems(c.items)
-      if (c.items.some((i) => i.needs_confirm) || !c.items.length) setScreen('case')
+      const stillReading = Object.values(c.uploads ?? {}).some((u) => u.state === 'reading')
+      if (c.items.some((i) => i.needs_confirm) || !c.items.length || stillReading) setScreen('case')
       else { setResult(await api.check(c.case_id)); setScreen('results') }
     }).catch((e) => { setError(e instanceof ApiError && e.status === 404 ? t('err.expired') : t('err.server_down')); setScreen('welcome') })
   }, [t])
