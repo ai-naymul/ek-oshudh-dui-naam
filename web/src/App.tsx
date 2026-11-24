@@ -48,6 +48,8 @@ export default function App() {
   useEffect(() => { window.scrollTo({ top: 0 }) }, [screen])
 
   function begin(c: { case_id: string; items?: ItemView[] }, isSample: boolean) {
+    // the case is in the address: if the phone reloads the page (Android may, after the camera), it comes back
+    window.history.replaceState(null, '', `${window.location.pathname}?case=${encodeURIComponent(c.case_id)}`)
     setCaseId(c.case_id)
     setItems(c.items ?? [])
     setSample(isSample)

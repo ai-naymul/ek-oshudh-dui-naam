@@ -9,7 +9,8 @@ import { Press, aiReady, spring } from './Shell'
 // For several photos at once: which one is being read (n of 'of') and how many medicines each finished one gave.
 type Busy = { kind: 'image' | 'voice' | 'text'; preview?: string; n?: number; of?: number; done?: number[] } | null
 // One row per photo being read. Photos are read at the same time, and more can be added while they are read.
-type Photo = { id: number; preview: string; state: 'reading' | 'done' | 'none' | 'failed' | 'repeat'; found: number }
+type Photo = { id: number; preview: string; state: 'reading' | 'done' | 'none' | 'failed' | 'repeat'; found: number; uploadId: string; started: number }
+const PHOTO_GIVE_UP_MS = 150_000   // no answer and not in the case after this long: show 'try again'
 type Pending = { item: ItemView; index: number; timer: number } | null
 
 function errorText(e: unknown, kind: 'image' | 'voice' | 'text'): string {
@@ -50,7 +51,12 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   // late answers from a case that is no longer on screen must not land in the new one
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
-  const addItems = (more: ItemView[]) => { if (alive.current) setItems((prev) => [...prev, ...more]) }
+  // never the same card twice: an answer can arrive after the case was already re-read from the server
+  const addItems = (more: ItemView[]) => { if (alive.current) setItems((prev) => [...prev, ...more.filter((m) => !prev.some((p) => p.item_id === m.item_id))]) }
+  const controllers = useRef(new Map<number, AbortController>())
+  const blobs = useRef(new Map<number, Blob>())
+  const pendingRef = useRef<Pending>(null)
+  pendingRef.current = pending   // a card removed but still undoable stays hidden when the case is re-read
   const fail = (msg: string) => { if (alive.current) setError(msg) }
 
   // Remove with undo: the line disappears at once; the server forgets it after 5 s unless the person taps undo.
@@ -97,19 +103,61 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   // Read one photo; several run at the same time (the server only locks the case to save the result).
   async function readPhoto(file: Blob, allowRepeat = false) {
     const id = ++photoSeq.current
+    const uploadId = `${caseId}-${Date.now().toString(36)}-${id}`
     const preview = URL.createObjectURL(file)
-    setPhotos((ps) => [...ps, { id, preview, state: 'reading', found: 0 }])
-    const set = (patch: Partial<Photo>) => { if (alive.current) setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p))) }
+    setPhotos((ps) => [...ps, { id, preview, state: 'reading', found: 0, uploadId, started: Date.now() }])
+    const set = (patch: Partial<Photo>) => { if (alive.current) setPhotos((ps) => ps.map((p) => (p.id === id && p.state === 'reading' ? { ...p, ...patch } : p))) }
     let small: Blob
     try { small = file instanceof File ? await shrink(file) : file } catch { fail(tt('err.not_photo')); set({ state: 'failed' }); return }
+    blobs.current.set(id, small)
+    const ctrl = new AbortController()
+    controllers.current.set(id, ctrl)
     try {
-      const res = await api.addImage(caseId, small, allowRepeat)
+      const res = await api.addImage(caseId, small, allowRepeat, uploadId, ctrl.signal)
       if (!alive.current) return
       if (res.duplicate_of) { setRepeat(small); set({ state: 'repeat' }); return }
       addItems(res.items)
       if (!res.items.length) fail(tt('err.no_items_photo'))
       set({ state: res.items.length ? 'done' : 'none', found: res.items.length })
-    } catch (e) { fail(errorText(e, 'image')); set({ state: 'failed' }) }
+    } catch (e) {
+      if (ctrl.signal.aborted) return                                   // already finished from the case (sync)
+      if (e instanceof ApiError) { fail(errorText(e, 'image')); set({ state: 'failed' }); return }   // the server said no
+      void sync()          // the connection broke (e.g. the camera opened): the server may have read and saved it anyway
+    }
+  }
+
+  // The server is the record of what was read: ask it which uploads are finished and show their medicines.
+  const sync = useCallback(async () => {
+    try {
+      const c = await api.getCase(caseId)
+      if (!alive.current) return
+      const hidden = pendingRef.current?.item.item_id
+      setItems(() => c.items.filter((i) => i.item_id !== hidden))
+      setPhotos((ps) => ps.map((p) => {
+        if (p.state !== 'reading') return p
+        const u = c.uploads?.[p.uploadId]
+        if (!u) return Date.now() - p.started > PHOTO_GIVE_UP_MS ? { ...p, state: 'failed' } : p
+        controllers.current.get(p.id)?.abort()
+        if (u.duplicate_of) { const b = blobs.current.get(p.id); if (b) setRepeat(b) }
+        return { ...p, state: u.duplicate_of ? 'repeat' : u.items.length ? 'done' : 'none', found: u.items.length }
+      }))
+    } catch { /* offline for a moment: the next round asks again */ }
+  }, [caseId, setItems])
+
+  // Coming back from the camera, and every few seconds while a photo is being read: ask the case.
+  useEffect(() => {
+    if (!reading) return
+    const onVisible = () => { if (document.visibilityState === 'visible') void sync() }
+    document.addEventListener('visibilitychange', onVisible)
+    const h = window.setInterval(() => { void sync() }, 4000)
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(h) }
+  }, [reading, sync])
+
+  function retryPhoto(p: Photo) {
+    const b = blobs.current.get(p.id)
+    setPhotos((ps) => ps.filter((x) => x.id !== p.id))
+    URL.revokeObjectURL(p.preview)
+    if (b) void readPhoto(b)
   }
 
   function onFiles(files: FileList | null) {
@@ -120,13 +168,15 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
   }
 
   // When every photo in this round is read: one summary line, and the progress rows go away.
+  // A photo that failed stays, with 'try again'.
   useEffect(() => {
-    if (!photos.length || reading) return
-    const total = photos.reduce((a, p) => a + p.found, 0)
-    if (photos.length > 1) setDoneNote(tt('photos.done', { n: bn(photos.length), k: bn(total) }))
-    else if (photos[0].found > 1) setDoneNote(tt('photos.one_many', { k: bn(photos[0].found) }))
-    photos.forEach((p) => URL.revokeObjectURL(p.preview))
-    setPhotos([])
+    if (reading || !photos.some((p) => p.state !== 'failed')) return
+    const finished = photos.filter((p) => p.state !== 'failed')
+    const total = finished.reduce((a, p) => a + p.found, 0)
+    if (finished.length > 1) setDoneNote(tt('photos.done', { n: bn(finished.length), k: bn(total) }))
+    else if (finished[0].found > 1) setDoneNote(tt('photos.one_many', { k: bn(finished[0].found) }))
+    finished.forEach((p) => { URL.revokeObjectURL(p.preview); blobs.current.delete(p.id); controllers.current.delete(p.id) })
+    setPhotos((ps) => ps.filter((p) => p.state === 'failed'))
   }, [photos, reading])
 
   function addRepeat() {
@@ -206,7 +256,7 @@ export function CaseScreen({ caseId, items, setItems, onCheck, checking, stats, 
         )}
         <AnimatePresence>
           {photos.length === 1 && reading && <Working busy={{ kind: 'image', preview: photos[0].preview }} products={stats?.products} />}
-          {photos.length > 1 && <PhotoProgress photos={photos} />}
+          {(photos.length > 1 || photos.some((p) => p.state === 'failed')) && <PhotoProgress photos={photos} onRetry={retryPhoto} />}
         </AnimatePresence>
         {doneNote && !busy && <p role="status" className="mt-4 flex items-start gap-2 rounded-xl bg-rx-soft p-3 text-[1rem] text-rx-deep"><Check className="mt-1 shrink-0" size={18} strokeWidth={3} aria-hidden />{doneNote}</p>}
         <AnimatePresence>
@@ -301,7 +351,7 @@ function Working({ busy, products }: { busy: NonNullable<Busy>; products?: numbe
 }
 
 // Several photos: one row each, with what that photo gave once it is read.
-function PhotoProgress({ photos }: { photos: Photo[] }) {
+function PhotoProgress({ photos, onRetry }: { photos: Photo[]; onRetry: (p: Photo) => void }) {
   const t = useCopy()
   const reduce = useReducedMotion()
   const label = (p: Photo, i: number) => {
@@ -324,6 +374,7 @@ function PhotoProgress({ photos }: { photos: Photo[] }) {
               {p.state === 'reading' ? <Loader2 size={16} className="animate-spin" aria-hidden /> : p.state === 'done' ? <Check size={16} strokeWidth={3} aria-hidden /> : <AlertCircle size={16} aria-hidden />}
               {label(p, i)}
             </p>
+            {p.state === 'failed' && <Press onClick={() => onRetry(p)} className="ml-auto min-h-11 shrink-0 rounded-full bg-paper px-3 text-[0.9rem] font-semibold text-rx ring-1 ring-foil">{t('photos.retry')}</Press>}
           </li>
         ))}
       </ul>

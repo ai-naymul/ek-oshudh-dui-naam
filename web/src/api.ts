@@ -69,12 +69,15 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   stats: () => call<Stats>('/api/stats'),
   newCase: () => call<{ case_id: string }>('/api/cases', { method: 'POST' }),
-  getCase: (cid: string) => call<{ case_id: string; items: ItemView[] }>(`/api/cases/${encodeURIComponent(cid)}`),
-  addImage: (cid: string, file: Blob, allowRepeat = false) => {
+  getCase: (cid: string) => call<{ case_id: string; items: ItemView[]; uploads?: Record<string, { doc_id: string | null; duplicate_of: string | null; items: string[] }> }>(`/api/cases/${encodeURIComponent(cid)}`),
+  // upload_id: the phone can lose this answer (Android drops the connection when the camera opens); the case then says
+  // what this upload gave (getCase().uploads).
+  addImage: (cid: string, file: Blob, allowRepeat = false, uploadId?: string, signal?: AbortSignal) => {
     const fd = new FormData()
     fd.append('file', file, 'photo.jpg')
+    if (uploadId) fd.append('upload_id', uploadId)
     return call<{ doc_id: string | null; duplicate_of: string | null; kind: string; items: ItemView[]; latency_ms: number }>(
-      `/api/cases/${cid}/images${allowRepeat ? '?allow_repeat=true' : ''}`, { method: 'POST', body: fd })
+      `/api/cases/${cid}/images${allowRepeat ? '?allow_repeat=true' : ''}`, { method: 'POST', body: fd, signal })
   },
   status: (cid: string, iid: string, taking: Taking) =>
     call<ItemView>(`/api/cases/${cid}/items/${iid}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taking }) }),

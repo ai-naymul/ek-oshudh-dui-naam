@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -121,7 +121,7 @@ def _is_image(data: bytes) -> bool:
 
 # Plain (non-async) routes: FastAPI runs them in a worker thread, so a slow AI call never blocks other visitors.
 @app.post("/api/cases/{case_id}/images")
-def add_image(case_id: str, file: UploadFile = File(...), allow_repeat: bool = False):
+def add_image(case_id: str, file: UploadFile = File(...), allow_repeat: bool = False, upload_id: str | None = Form(None)):
     t0 = time.time()
     case = _case(case_id)
     data = file.file.read(MAX_UPLOAD + 1)
@@ -131,7 +131,7 @@ def add_image(case_id: str, file: UploadFile = File(...), allow_repeat: bool = F
         raise HTTPException(415, "this file is not a photo")
     from app.ai.gemini import GeminiError
     try:
-        return live(engine().add_image(case, data, allow_repeat=allow_repeat), t0)
+        return live(engine().add_image(case, data, allow_repeat=allow_repeat, upload_id=upload_id), t0)
     except GeminiError as e:
         raise HTTPException(502, f"reading failed: {e}")
 
@@ -375,7 +375,7 @@ def get_case(case_id: str):
     """Reopen a case by link (?case=...): its items, so the web app can show confirm or results."""
     t0 = time.time()
     case = _case(case_id)
-    return live({"case_id": case.case_id, "items": [engine().item_view(i) for i in case.items]}, t0)
+    return live({"case_id": case.case_id, "items": [engine().item_view(i) for i in case.items], "uploads": case.uploads}, t0)
 
 
 # The same server also serves the built web app (web/dist): one command runs the whole product locally.

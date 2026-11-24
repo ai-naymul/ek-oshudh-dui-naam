@@ -119,3 +119,20 @@ def test_c2_a_diagnosis_line_is_not_added_as_a_medicine(client, monkeypatch, lin
     cid = client.post("/api/cases").json()["case_id"]
     out = photo(client, monkeypatch, cid, [(line, "", ""), ("Des", "5 mg", "")], kind="prescription")
     assert [i["chosen"]["brand"] for i in out["items"]] == ["Des"]
+
+
+# 24 Nov, on the phone: opening the camera while a prescription was being read dropped that connection; the server
+# finished and saved it, but the phone never heard. Each upload carries an id, and the case says which are done.
+def test_the_case_says_which_uploads_are_finished(client, monkeypatch):
+    import app.ai.perceive as perceive
+    from tests.test_api import fake_read
+    from tests.test_robustness import jpg
+    cid = client.post("/api/cases").json()["case_id"]
+    monkeypatch.setattr(perceive, "read_image", fake_read([("Napa", "500 mg", ""), ("Ace", "500 mg", "")], kind="strip"))
+    client.post(f"/api/cases/{cid}/images", files={"file": ("a.jpg", jpg(), "image/jpeg")}, data={"upload_id": "u-1"})
+    monkeypatch.setattr(perceive, "read_image", fake_read([("Seclo", "20 mg", "")], kind="prescription", doctor="Dr Z"))
+    client.post(f"/api/cases/{cid}/images", files={"file": ("b.jpg", jpg(), "image/jpeg")}, data={"upload_id": "u-2"})
+    client.post(f"/api/cases/{cid}/images", files={"file": ("b.jpg", jpg(), "image/jpeg")}, data={"upload_id": "u-3"})
+    case = client.get(f"/api/cases/{cid}").json()
+    assert len(case["uploads"]["u-1"]["items"]) == 2 and len(case["uploads"]["u-2"]["items"]) == 1
+    assert case["uploads"]["u-3"]["duplicate_of"] is not None            # the same prescription again

@@ -112,6 +112,7 @@ class Case:
     trace: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     sample: bool = False
+    uploads: dict = field(default_factory=dict)   # upload id from the phone -> what that photo gave (or its duplicate)
     _next_item: int = 1
     _next_doc: int = 1
 
@@ -122,6 +123,7 @@ class Case:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self.__dict__.setdefault("uploads", {})
         self.lock = threading.Lock()
 
     def new_ids(self, n_items: int, new_doc: bool = False) -> tuple[list[str], str | None]:
@@ -320,7 +322,15 @@ class Engine:
         same_doctor = bool(a["doctor"] and b["doctor"]) and fuzz.token_set_ratio(a["doctor"], b["doctor"]) >= 80
         return overlap >= 0.75 or (overlap >= 0.5 and same_doctor)
 
-    def add_image(self, case: Case, data: bytes, allow_repeat: bool = False) -> dict:
+    def add_image(self, case: Case, data: bytes, allow_repeat: bool = False, upload_id: str | None = None) -> dict:
+        out = self._add_image(case, data, allow_repeat)
+        if upload_id:   # the phone can lose this answer (camera opened); it asks the case later what each upload gave
+            with case.lock:
+                case.uploads[upload_id[:64]] = {"doc_id": out["doc_id"], "duplicate_of": out["duplicate_of"],
+                                                "items": [i["item_id"] for i in out["items"]]}
+        return out
+
+    def _add_image(self, case: Case, data: bytes, allow_repeat: bool = False) -> dict:
         from app.ai.gemini import image_part
         from app.ai.perceive import crop, read_image
         t0 = time.time()

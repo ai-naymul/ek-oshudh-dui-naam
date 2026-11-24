@@ -255,3 +255,31 @@ test('the app name in the top bar goes back to the first page', async ({ page })
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' })).toBeVisible()
 })
+
+// 24 Nov on the phone: opening the camera while a prescription was read dropped that connection; the server had read
+// and saved it, the phone never heard and looked stuck. The app now asks the case what each upload gave.
+test('a photo whose answer is lost still shows its medicines (connection dropped, server saved it)', async ({ page }) => {
+  let uploadId = ''
+  await page.route('**/images', async (route) => {
+    const body = route.request().postDataBuffer()?.toString('latin1') ?? ''
+    uploadId = /name="upload_id"\r\n\r\n([^\r]+)/.exec(body)?.[1] ?? ''
+    await route.abort('connectionreset')
+  })
+  await page.route(/\/api\/cases\/[^/]+$/, async (route) => {
+    if (route.request().method() !== 'GET' || !uploadId) return route.continue()
+    const item = { item_id: 'I1', doc_id: 'D1', source: 'rx', reading: 'Exium', alternatives: [], handwritten: true, agree: null,
+      chosen: { product_id: 1, brand: 'Exium', strength: '20 mg', form: 'Capsule', maker: 'Radiant', applied: false, web: null },
+      confidence: 0.99, method: 'R2', needs_confirm: false, options: [], schedule: {}, per_day: null, has_crop: false, agent: null,
+      doctor: 'Dr A', taking: 'unsure' }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ case_id: 'x', items: [item],
+      uploads: { [uploadId]: { doc_id: 'D1', duplicate_of: null, items: ['I1'] } }, request_id: 'x', latency_ms: 1 }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ওষুধের ব্যাগ পরীক্ষা করুন' }).click()
+  await expect(page).toHaveURL(/\?case=/)                                   // a reload brings the case back
+  await page.getByRole('button', { name: /প্রেসক্রিপশন/ }).click()
+  await page.locator('input[type=file][multiple]').setInputFiles({ name: 'rx.png', mimeType: 'image/png', buffer: PNG })
+  await expect(page.getByRole('article')).toHaveCount(1, { timeout: 10000 })
+  await expect(page.getByText(/পৌঁছায়নি/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /মিলিয়ে দেখুন/ })).toBeEnabled()
+})
